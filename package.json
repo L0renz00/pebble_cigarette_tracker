@@ -1,0 +1,62 @@
+{
+    "author": "cornelius.lechner@gmail.com",
+    "dependencies": {},
+    "keywords": [],
+    "name": "zigarettentracker",
+    "pebble": {
+        "displayName": "Zigarettentracker",
+        "enableMultiJS": true,
+        "messageKeys": [],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "file": "images/cross.png",
+                    "name": "CROSS",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/confirm.png",
+                    "name": "CONFIRM",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/warning.png",
+                    "name": "WARNING",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/smoking.png",
+                    "menuIcon": true,
+                    "name": "CIGARETTE",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/tick.png",
+                    "name": "TICK",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                }
+            ]
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "gabbro",
+            "flint"
+        ],
+        "uuid": "7ab4681a-5d02-44b6-bafd-c8bee43fecb1",
+        "watchapp": {
+            "watchface": false
+        }
+    },
+    "version": "3.3.0"
+}
