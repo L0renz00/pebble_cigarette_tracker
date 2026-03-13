@@ -2,6 +2,7 @@
 #include "alltime_window.h"
 #include "history_window.h"
 #include "storage.h"
+#include "main.h"
 
 static Window *s_alltime_window;
 
@@ -27,12 +28,13 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
-  // Stack: [main, stats, trend, hourly, alltime] — pop the four carousel
-  // windows without animation to land directly back on main.
-  window_stack_pop(false);
-  window_stack_pop(false);
-  window_stack_pop(false);
-  window_stack_pop(false);
+  // Pop every carousel window above main without animation. Using a loop
+  // instead of a hardcoded count means this stays correct if the navigation
+  // depth ever changes (e.g. history window added to a different path).
+  Window *main = main_window_get();
+  while (window_stack_get_top_window() != main) {
+    window_stack_pop(false);
+  }
 }
 
 static void click_config_provider(void *context) {

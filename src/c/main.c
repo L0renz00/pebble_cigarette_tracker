@@ -57,6 +57,10 @@ void main_window_refresh(void) {
   update_display();
 }
 
+Window *main_window_get(void) {
+  return s_main_window;
+}
+
 // --- Tick handler ------------------------------------------------------------
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
