@@ -140,6 +140,8 @@ void storage_save(int count, time_t last_time) {
   persist_write_int(KEY_COUNT,     (int32_t)count);
   persist_write_int(KEY_LAST_TIME, (int32_t)last_time);
 
+  // Today's slot is already stamped by ensure_this_week() inside storage_load(),
+  // which is always called before any save. We only need to update the count.
   DayEntry entries[HISTORY_DAYS];
   load_history_raw(entries);
 
@@ -147,13 +149,6 @@ void storage_save(int count, time_t last_time) {
   time_t week_start  = get_week_start(time(NULL));
   int today_index    = (int)((today_start - week_start) / (24 * 60 * 60));
   if (today_index < 0 || today_index >= HISTORY_DAYS) today_index = 0;
-
-  if ((time_t)entries[today_index].day_timestamp != today_start) {
-    entries[today_index].day_timestamp = (int32_t)today_start;
-    int32_t total_days = persist_exists(KEY_TOTAL_DAYS)
-                         ? persist_read_int(KEY_TOTAL_DAYS) : 0;
-    persist_write_int(KEY_TOTAL_DAYS, total_days + 1);
-  }
 
   entries[today_index].count = (int32_t)count;
   persist_write_data(KEY_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
@@ -267,9 +262,7 @@ void storage_get_hour_histogram(uint8_t *out_24) {
   }
 }
 
-void storage_reset_hour_histogram(void) {
-  persist_delete(KEY_HOUR_HISTOGRAM);
-}
+
 
 // --- Seed / week start -------------------------------------------------------
 

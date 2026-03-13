@@ -31,4 +31,3 @@ time_t  storage_get_week_start(void);
 // Hour-of-day histogram — 24 buckets (0..23h), reset each week rollover.
 void storage_log_hour(int hour);
 void storage_get_hour_histogram(uint8_t *out_24);
-void storage_reset_hour_histogram(void);
