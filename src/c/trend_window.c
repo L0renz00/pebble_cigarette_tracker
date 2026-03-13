@@ -5,31 +5,37 @@
 #include "storage.h"
 
 // ============================================================
-// TrendLayer — custom layer, self-contained via layer_create_with_data
+// TrendLayer — area chart for the current week.
+//
+// Additions over the original:
+//   • Grow-from-baseline animation (EaseOut, 450 ms) on window load.
+//   • Min/max value labels: the count is drawn just above the peak
+//     dot and just below the trough dot so you can read the range
+//     at a glance without extra chrome.
 // ============================================================
 
 typedef Layer TrendLayer;
 
-// +2 for the two bottom-closing corners of the filled area path
-#define TREND_PATH_MAX (HISTORY_DAYS + 2)
+#define TREND_PATH_MAX   (HISTORY_DAYS + 2)
+#define ANIM_DURATION_MS 450
 
 typedef struct {
-  int32_t counts[HISTORY_DAYS];     // count per weekday slot; 0 if not visited
-  bool    populated[HISTORY_DAYS];  // true if that slot has real data
-  int     num_populated;
-  int     today_index;              // 0=Mon..6=Sun, -1 if unknown
+  int32_t    counts[HISTORY_DAYS];
+  bool       populated[HISTORY_DAYS];
+  int        num_populated;
+  int        today_index;       // 0=Mon..6=Sun, -1 if unknown
+  int16_t    anim_progress;     // 0–100; 100 = fully drawn
+  Animation *animation;
 } TrendLayerData;
 
 // --- Drawing helpers ---------------------------------------------------------
 
-// Dot at (cx, cy): filled circle, optionally with a hollow centre for today.
 static void draw_dot(GContext *ctx, int cx, int cy, bool is_today,
                      GColor bg_color) {
   int outer_r = is_today ? 4 : 3;
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_circle(ctx, GPoint(cx, cy), outer_r);
   if (is_today) {
-    // Ring effect: punch a 2 px hole in the window background colour.
     graphics_context_set_fill_color(ctx, bg_color);
     graphics_fill_circle(ctx, GPoint(cx, cy), 2);
   }
@@ -51,40 +57,46 @@ static void trend_layer_update_proc(Layer *layer, GContext *ctx) {
   }
 
   // ---- Layout ---------------------------------------------------------------
+  //
+  // info_h: fixed strip at the very top that holds the H/L labels and the
+  // today-count anchor. The plot sits entirely below this strip so no label
+  // ever collides with a data point.
 
-  GFont  label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  int    label_h    = 14;
-  int    top_pad    = 8;   // breathing room above the tallest bar
-  int    slot_w     = bounds.size.w / HISTORY_DAYS;
+  GFont label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  GFont info_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+  int   label_h    = 14;
+  int   info_h     = 18;
+  int   slot_w     = bounds.size.w / HISTORY_DAYS;
 
-  int plot_top    = top_pad;
+  int plot_top    = info_h;
   int plot_bottom = bounds.size.h - label_h - 4;
   int plot_h      = plot_bottom - plot_top;
   if (plot_h < 1) plot_h = 1;
 
-  // Background colour passed to draw_dot for the ring punch-out.
   GColor bg = PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite);
+  int    p  = data->anim_progress;   // 0–100
 
   // ---- Scaling --------------------------------------------------------------
 
-  int max_count = 1;
+  int max_count = 1, min_count = INT32_MAX;
+  int max_idx   = -1, min_idx  = -1;
   for (int i = 0; i < HISTORY_DAYS; i++) {
-    if (data->populated[i] && (int)data->counts[i] > max_count)
-      max_count = (int)data->counts[i];
+    if (!data->populated[i]) continue;
+    int c = (int)data->counts[i];
+    if (c > max_count || max_idx < 0) { max_count = c; max_idx = i; }
+    if (c < min_count || min_idx < 0) { min_count = c; min_idx = i; }
   }
+  // Edge case: only one populated slot — min == max, don't double-annotate.
+  bool single_slot = (max_idx == min_idx);
 
-  // Inline helpers — map a count to a y pixel and a slot to a centre x pixel.
-#define SLOT_CX(i)   ((i) * slot_w + slot_w / 2)
-#define COUNT_Y(c)   (plot_bottom - ((int)(c) * plot_h / max_count))
+#define SLOT_CX(i)       ((i) * slot_w + slot_w / 2)
+#define COUNT_Y_FULL(c)  (plot_bottom - ((int)(c) * plot_h / max_count))
+#define COUNT_Y(c)       (plot_bottom - ((plot_bottom - COUNT_Y_FULL(c)) * p / 100))
 
   // ---- 1. Filled area path --------------------------------------------------
-  //
-  // Trace populated points left-to-right, then close to the baseline.
-  // Path layout: [bottom-left, data points..., bottom-right]
 
   GPoint closed[TREND_PATH_MAX];
-  int    npts = 0;
-  int    first_x = -1, last_x = -1;
+  int npts = 0, first_x = -1, last_x = -1;
 
   for (int i = 0; i < HISTORY_DAYS; i++) {
     if (!data->populated[i]) continue;
@@ -92,31 +104,30 @@ static void trend_layer_update_proc(Layer *layer, GContext *ctx) {
     int y  = COUNT_Y(data->counts[i]);
     if (first_x < 0) first_x = cx;
     last_x = cx;
-    closed[npts + 1] = GPoint(cx, y);  // leave slot 0 for bottom-left corner
+    closed[npts + 1] = GPoint(cx, y);
     npts++;
   }
 
   if (npts >= 1) {
-    closed[0]        = GPoint(first_x, plot_bottom);   // bottom-left
-    closed[npts + 1] = GPoint(last_x,  plot_bottom);   // bottom-right
-
+    closed[0]        = GPoint(first_x, plot_bottom);
+    closed[npts + 1] = GPoint(last_x,  plot_bottom);
     GPathInfo pi = { .num_points = npts + 2, .points = closed };
-    GPath *area_path = gpath_create(&pi);
+    GPath *area = gpath_create(&pi);
     graphics_context_set_fill_color(ctx,
         PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack));
-    gpath_draw_filled(ctx, area_path);
-    gpath_destroy(area_path);
+    gpath_draw_filled(ctx, area);
+    gpath_destroy(area);
   }
 
   // ---- 2. Dotted average line -----------------------------------------------
 
-  if (data->num_populated > 0) {
+  {
     int32_t total = 0;
     for (int i = 0; i < HISTORY_DAYS; i++)
       if (data->populated[i]) total += data->counts[i];
-
-    // Use full-precision multiply before dividing to keep one decimal of accuracy.
-    int avg_y = plot_bottom - (int)(total * plot_h / (data->num_populated * max_count));
+    int avg_y_full = plot_bottom -
+        (int)(total * plot_h / (data->num_populated * max_count));
+    int avg_y = plot_bottom - ((plot_bottom - avg_y_full) * p / 100);
 
     graphics_context_set_stroke_color(ctx,
         PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
@@ -127,7 +138,7 @@ static void trend_layer_update_proc(Layer *layer, GContext *ctx) {
     }
   }
 
-  // ---- 3. Line connecting populated points ----------------------------------
+  // ---- 3. Connecting line ---------------------------------------------------
 
   graphics_context_set_stroke_color(ctx, GColorBlack);
   int prev_x = -1, prev_y = -1;
@@ -135,36 +146,61 @@ static void trend_layer_update_proc(Layer *layer, GContext *ctx) {
     if (!data->populated[i]) { prev_x = -1; prev_y = -1; continue; }
     int cx = SLOT_CX(i);
     int y  = COUNT_Y(data->counts[i]);
-    if (prev_x >= 0)
-      graphics_draw_line(ctx, GPoint(prev_x, prev_y), GPoint(cx, y));
-    prev_x = cx;
-    prev_y = y;
+    if (prev_x >= 0) graphics_draw_line(ctx, GPoint(prev_x, prev_y), GPoint(cx, y));
+    prev_x = cx; prev_y = y;
   }
 
-  // ---- 4. Dots at each data point -------------------------------------------
+  // ---- 4. Dots --------------------------------------------------------------
 
   for (int i = 0; i < HISTORY_DAYS; i++) {
     if (!data->populated[i]) continue;
-    int cx       = SLOT_CX(i);
-    int y        = COUNT_Y(data->counts[i]);
-    bool is_today = (i == data->today_index);
-    draw_dot(ctx, cx, y, is_today, bg);
+    int cx = SLOT_CX(i);
+    int y  = COUNT_Y(data->counts[i]);
+    draw_dot(ctx, cx, y, (i == data->today_index), bg);
   }
 
-  // ---- 5. Today's count, top-right ------------------------------------------
+  // ---- 5. Info strip (top, above plot) -------------------------------------
+  //
+  // Left   "H: X"  highest day    (GOTHIC_14_BOLD, black)
+  // Centre "L: X"  lowest day     (GOTHIC_14_BOLD, black) — omitted if 1 slot
+  // Right  today count            (GOTHIC_18_BOLD, BlueMoon)
 
-  if (data->today_index >= 0 &&
-      data->today_index < HISTORY_DAYS &&
-      data->populated[data->today_index]) {
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%d", (int)data->counts[data->today_index]);
-    graphics_context_set_text_color(ctx,
-        PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack));
-    graphics_draw_text(ctx, buf,
-                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(bounds.size.w - 30, 0, 30, 20),
-                       GTextOverflowModeTrailingEllipsis,
-                       GTextAlignmentRight, NULL);
+  {
+    int stat_w = bounds.size.w / 3;
+
+    graphics_context_set_text_color(ctx, GColorBlack);
+
+    if (max_idx >= 0) {
+      char max_buf[8];
+      snprintf(max_buf, sizeof(max_buf), "H: %d", max_count);
+      graphics_draw_text(ctx, max_buf, info_font,
+                         GRect(0, 0, stat_w, info_h),
+                         GTextOverflowModeTrailingEllipsis,
+                         GTextAlignmentLeft, NULL);
+    }
+
+    if (min_idx >= 0 && !single_slot) {
+      char min_buf[8];
+      snprintf(min_buf, sizeof(min_buf), "L: %d", min_count);
+      graphics_draw_text(ctx, min_buf, info_font,
+                         GRect(stat_w, 0, stat_w, info_h),
+                         GTextOverflowModeTrailingEllipsis,
+                         GTextAlignmentLeft, NULL);
+    }
+
+    if (data->today_index >= 0 &&
+        data->today_index < HISTORY_DAYS &&
+        data->populated[data->today_index]) {
+      char buf[8];
+      snprintf(buf, sizeof(buf), "%d", (int)data->counts[data->today_index]);
+      graphics_context_set_text_color(ctx,
+          PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack));
+      graphics_draw_text(ctx, buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                         GRect(bounds.size.w - 30, 0, 30, info_h),
+                         GTextOverflowModeTrailingEllipsis,
+                         GTextAlignmentRight, NULL);
+    }
   }
 
   // ---- 6. Day labels along the bottom ---------------------------------------
@@ -182,7 +218,46 @@ static void trend_layer_update_proc(Layer *layer, GContext *ctx) {
   }
 
 #undef SLOT_CX
+#undef COUNT_Y_FULL
 #undef COUNT_Y
+}
+
+// --- Animation ---------------------------------------------------------------
+
+static void anim_update(Animation *anim, AnimationProgress progress) {
+  Layer *layer = (Layer *)animation_get_context(anim);
+  TrendLayerData *data = (TrendLayerData *)layer_get_data(layer);
+  data->anim_progress = (int16_t)(progress * 100 / ANIMATION_NORMALIZED_MAX);
+  layer_mark_dirty(layer);
+}
+
+static void anim_stopped(Animation *anim, bool finished, void *context) {
+  Layer *layer = (Layer *)context;
+  TrendLayerData *data = (TrendLayerData *)layer_get_data(layer);
+  data->anim_progress = 100;
+  layer_mark_dirty(layer);
+  data->animation = NULL;
+}
+
+static void trend_layer_animate_in(TrendLayer *layer) {
+  TrendLayerData *data = (TrendLayerData *)layer_get_data(layer);
+  if (data->animation) {
+    animation_unschedule(data->animation);
+    animation_destroy(data->animation);
+    data->animation = NULL;
+  }
+  data->anim_progress = 0;
+  layer_mark_dirty(layer);
+
+  static const AnimationImplementation s_impl = { .update = anim_update };
+
+  Animation *anim = animation_create();
+  animation_set_duration(anim, ANIM_DURATION_MS);
+  animation_set_curve(anim, AnimationCurveEaseOut);
+  animation_set_implementation(anim, &s_impl);
+  animation_set_handlers(anim, (AnimationHandlers){ .stopped = anim_stopped }, layer);
+  data->animation = anim;
+  animation_schedule(anim);
 }
 
 // --- TrendLayer public API ---------------------------------------------------
@@ -191,25 +266,31 @@ static TrendLayer *trend_layer_create(GRect frame) {
   TrendLayer *layer = layer_create_with_data(frame, sizeof(TrendLayerData));
   TrendLayerData *data = (TrendLayerData *)layer_get_data(layer);
   memset(data, 0, sizeof(TrendLayerData));
-  data->today_index = -1;
+  data->today_index   = -1;
+  data->anim_progress = 100;
   layer_set_update_proc(layer, trend_layer_update_proc);
   return layer;
 }
 
 static void trend_layer_destroy(TrendLayer *layer) {
-  if (layer) layer_destroy(layer);
+  if (!layer) return;
+  TrendLayerData *data = (TrendLayerData *)layer_get_data(layer);
+  if (data->animation) {
+    animation_unschedule(data->animation);
+    animation_destroy(data->animation);
+    data->animation = NULL;
+  }
+  layer_destroy(layer);
 }
 
-// Populates the layer from a DayEntry array (from storage_get_history) plus
-// the current week's Monday-midnight timestamp (from storage_get_week_start).
 static void trend_layer_set_data(TrendLayer *layer,
-                                 DayEntry *entries, int num_entries,
-                                 time_t week_start) {
+                                  DayEntry *entries, int num_entries,
+                                  time_t week_start) {
   TrendLayerData *data = (TrendLayerData *)layer_get_data(layer);
   memset(data, 0, sizeof(TrendLayerData));
-  data->today_index = -1;
+  data->today_index   = -1;
+  data->anim_progress = 100;
 
-  // Map today to its slot index.
   time_t now = time(NULL);
   struct tm *now_tm = localtime(&now);
   now_tm->tm_hour = 0; now_tm->tm_min = 0; now_tm->tm_sec = 0;
@@ -218,7 +299,6 @@ static void trend_layer_set_data(TrendLayer *layer,
   if (today_slot >= 0 && today_slot < HISTORY_DAYS)
     data->today_index = today_slot;
 
-  // Fill counts into their positional slots.
   for (int i = 0; i < num_entries && i < HISTORY_DAYS; i++) {
     int slot = (int)(((time_t)entries[i].day_timestamp - week_start)
                      / (24 * 60 * 60));
@@ -235,14 +315,12 @@ static void trend_layer_set_data(TrendLayer *layer,
 // Trend window
 // ============================================================
 
-static Window    *s_trend_window;
-static TextLayer *s_title_layer;
-static Layer     *s_title_rule_layer;
+static Window     *s_trend_window;
+static TextLayer  *s_title_layer;
+static Layer      *s_title_rule_layer;
 static TrendLayer *s_trend_layer;
 
 static char s_title_buf[24];
-
-// --- Title rule --------------------------------------------------------------
 
 static void title_rule_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
@@ -250,8 +328,6 @@ static void title_rule_update_proc(Layer *layer, GContext *ctx) {
       PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
   graphics_draw_line(ctx, GPoint(0, 0), GPoint(bounds.size.w - 1, 0));
 }
-
-// --- Click handlers ----------------------------------------------------------
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   history_window_push();
@@ -271,13 +347,10 @@ static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
 }
 
-// --- Window lifecycle --------------------------------------------------------
-
 static void trend_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
-  // Title: same date-range style as stats_window
   time_t week_start = storage_get_week_start();
   time_t week_end   = week_start + 6 * 24 * 60 * 60;
   char start_str[8], end_str[8];
@@ -311,6 +384,7 @@ static void trend_window_load(Window *window) {
   trend_layer_set_data(s_trend_layer, entries, num_entries, week_start);
 
   layer_add_child(window_layer, s_trend_layer);
+  trend_layer_animate_in(s_trend_layer);
 }
 
 static void trend_window_unload(Window *window) {
@@ -320,8 +394,6 @@ static void trend_window_unload(Window *window) {
   window_destroy(s_trend_window);
   s_trend_window = NULL;
 }
-
-// --- Public API --------------------------------------------------------------
 
 void trend_window_push(void) {
   s_trend_window = window_create();

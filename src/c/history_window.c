@@ -3,16 +3,18 @@
 #include "storage.h"
 
 // ============================================================
-// HistoryLayer — area chart of weekly daily averages.
+// HistoryLayer — area chart of weekly daily averages (W9).
 //
-// Visual language matches W6 (trend_window): filled area,
-// line on top, dotted overall-average line, ring-dot on the
-// most recent entry, week-start date labels along the bottom.
+// Matches W6 (trend_window) visually: filled area (GColorOrange),
+// connecting line, dotted overall-average line, ring-dot on the
+// most recent entry.
+//
+// Extras:
+//   • Grow-from-baseline animation (EaseOut, 450 ms) on window load.
+//   • Min / max avg labels drawn above the peak and below the
+//     trough data point respectively.
+//
 // Capped at HISTORY_DISPLAY_WEEKS (5) for label readability.
-//
-// Animation: the entire chart grows upward from the baseline on
-// window load, driven by a single EaseOut Animation — cleaner
-// than per-bar stagger for a continuous area shape.
 // ============================================================
 
 #define HISTORY_DISPLAY_WEEKS  5
@@ -30,8 +32,7 @@ typedef struct {
 
 // --- Drawing helpers ---------------------------------------------------------
 
-static void draw_dot(GContext *ctx, int cx, int cy, bool is_latest,
-                     GColor bg) {
+static void draw_dot(GContext *ctx, int cx, int cy, bool is_latest, GColor bg) {
   int r = is_latest ? 4 : 3;
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_circle(ctx, GPoint(cx, cy), r);
@@ -56,47 +57,49 @@ static void history_layer_update_proc(Layer *layer, GContext *ctx) {
     return;
   }
 
-  // ---- Averages in tenths (e.g. 93 = 9.3 cigs/day) -------------------------
+  // ---- Averages in tenths (93 = 9.3 cigs/day) ------------------------------
 
   int avg_tenths[HISTORY_DISPLAY_WEEKS];
-  int max_tenths = 1;
+  int max_tenths = 1, min_tenths = INT32_MAX;
+  int max_idx = 0, min_idx = 0;
+
   for (int i = 0; i < data->num_entries; i++) {
     int32_t da = data->entries[i].days_active;
     avg_tenths[i] = (da > 0)
         ? (int)((data->entries[i].total * 10) / da)
         : 0;
-    if (avg_tenths[i] > max_tenths) max_tenths = avg_tenths[i];
+    if (avg_tenths[i] > max_tenths) { max_tenths = avg_tenths[i]; max_idx = i; }
+    if (avg_tenths[i] < min_tenths) { min_tenths = avg_tenths[i]; min_idx = i; }
   }
+  bool single_entry = (max_idx == min_idx) || (data->num_entries == 1);
 
   // ---- Layout ---------------------------------------------------------------
 
   GFont label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  GFont info_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   int   label_h    = 14;
-  int   top_pad    = 8;
+  int   info_h     = 18;
   int   slot_w     = bounds.size.w / data->num_entries;
 
-  int plot_top    = top_pad;
+  int plot_top    = info_h;
   int plot_bottom = bounds.size.h - label_h - 4;
   int plot_h      = plot_bottom - plot_top;
   if (plot_h < 1) plot_h = 1;
 
   GColor bg = PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite);
-  int    p  = data->anim_progress;   // 0–100
+  int    p  = data->anim_progress;
 
-  // Animated y: the chart grows upward from plot_bottom as progress goes 0→100.
-  // At p=0 every point sits on the baseline; at p=100 they're at full height.
-#define SLOT_CX(i)    ((i) * slot_w + slot_w / 2)
-#define AVG_Y_FULL(i) (plot_bottom - (avg_tenths[i] * plot_h / max_tenths))
-#define AVG_Y(i)      (plot_bottom - ((plot_bottom - AVG_Y_FULL(i)) * p / 100))
+#define SLOT_CX(i)        ((i) * slot_w + slot_w / 2)
+#define AVG_Y_FULL(i)     (plot_bottom - (avg_tenths[i] * plot_h / max_tenths))
+#define AVG_Y(i)          (plot_bottom - ((plot_bottom - AVG_Y_FULL(i)) * p / 100))
 
   // ---- 1. Filled area path --------------------------------------------------
 
   GPoint closed[HISTORY_PATH_MAX];
-  for (int i = 0; i < data->num_entries; i++) {
+  for (int i = 0; i < data->num_entries; i++)
     closed[i + 1] = GPoint(SLOT_CX(i), AVG_Y(i));
-  }
-  closed[0]                     = GPoint(SLOT_CX(0),                   plot_bottom);
-  closed[data->num_entries + 1] = GPoint(SLOT_CX(data->num_entries-1), plot_bottom);
+  closed[0]                     = GPoint(SLOT_CX(0),                    plot_bottom);
+  closed[data->num_entries + 1] = GPoint(SLOT_CX(data->num_entries - 1), plot_bottom);
 
   GPathInfo pi = { .num_points = data->num_entries + 2, .points = closed };
   GPath *area  = gpath_create(&pi);
@@ -107,51 +110,79 @@ static void history_layer_update_proc(Layer *layer, GContext *ctx) {
 
   // ---- 2. Dotted overall-average line ---------------------------------------
 
-  int32_t total_t = 0;
-  for (int i = 0; i < data->num_entries; i++) total_t += avg_tenths[i];
-  int avg_y_full = plot_bottom -
-      (int)(total_t * plot_h / (data->num_entries * max_tenths));
-  int avg_y = plot_bottom - ((plot_bottom - avg_y_full) * p / 100);
+  {
+    int32_t total_t = 0;
+    for (int i = 0; i < data->num_entries; i++) total_t += avg_tenths[i];
+    int avg_y_full = plot_bottom -
+        (int)(total_t * plot_h / (data->num_entries * max_tenths));
+    int avg_y = plot_bottom - ((plot_bottom - avg_y_full) * p / 100);
 
-  graphics_context_set_stroke_color(ctx,
-      PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
-  for (int x = 0; x < bounds.size.w; x += 6) {
-    int x2 = x + 2;
-    if (x2 >= bounds.size.w) x2 = bounds.size.w - 1;
-    graphics_draw_line(ctx, GPoint(x, avg_y), GPoint(x2, avg_y));
+    graphics_context_set_stroke_color(ctx,
+        PBL_IF_COLOR_ELSE(GColorBlack, GColorBlack));
+    for (int x = 0; x < bounds.size.w; x += 6) {
+      int x2 = x + 2;
+      if (x2 >= bounds.size.w) x2 = bounds.size.w - 1;
+      graphics_draw_line(ctx, GPoint(x, avg_y), GPoint(x2, avg_y));
+    }
   }
 
-  // ---- 3. Line connecting all points ----------------------------------------
+  // ---- 3. Connecting line ---------------------------------------------------
 
   graphics_context_set_stroke_color(ctx, GColorBlack);
   for (int i = 1; i < data->num_entries; i++) {
     graphics_draw_line(ctx,
-        GPoint(SLOT_CX(i-1), AVG_Y(i-1)),
-        GPoint(SLOT_CX(i),   AVG_Y(i)));
+        GPoint(SLOT_CX(i - 1), AVG_Y(i - 1)),
+        GPoint(SLOT_CX(i),     AVG_Y(i)));
   }
 
   // ---- 4. Dots — ring on most recent ----------------------------------------
 
   int latest = data->num_entries - 1;
-  for (int i = 0; i < data->num_entries; i++) {
+  for (int i = 0; i < data->num_entries; i++)
     draw_dot(ctx, SLOT_CX(i), AVG_Y(i), (i == latest), bg);
+
+  // ---- 5. Info strip (top, above plot) -------------------------------------
+  //
+  // Left   "H: X.X"  highest weekly avg  (GOTHIC_14_BOLD, black)
+  // Centre "L: X.X"  lowest weekly avg   (GOTHIC_14_BOLD, black) — omitted if 1 entry
+  // Right  most recent avg               (GOTHIC_18_BOLD, Orange)
+
+  {
+    int stat_w = bounds.size.w / 3;
+
+    graphics_context_set_text_color(ctx, GColorBlack);
+
+    char max_buf[10];
+    snprintf(max_buf, sizeof(max_buf), "H: %d.%d",
+             avg_tenths[max_idx] / 10, avg_tenths[max_idx] % 10);
+    graphics_draw_text(ctx, max_buf, info_font,
+                       GRect(0, 0, stat_w, info_h),
+                       GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentLeft, NULL);
+
+    if (!single_entry) {
+      char min_buf[10];
+      snprintf(min_buf, sizeof(min_buf), "L: %d.%d",
+               avg_tenths[min_idx] / 10, avg_tenths[min_idx] % 10);
+      graphics_draw_text(ctx, min_buf, info_font,
+                         GRect(stat_w, 0, stat_w, info_h),
+                         GTextOverflowModeTrailingEllipsis,
+                         GTextAlignmentLeft, NULL);
+    }
+
+    char anchor[16];
+    snprintf(anchor, sizeof(anchor), "%d.%d/d",
+             avg_tenths[latest] / 10, avg_tenths[latest] % 10);
+    graphics_context_set_text_color(ctx,
+        PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack));
+    graphics_draw_text(ctx, anchor,
+                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(bounds.size.w - 44, 0, 44, info_h),
+                       GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentRight, NULL);
   }
 
-  // ---- 5. Most recent avg, top-right ----------------------------------------
-
-  char anchor[16];
-  snprintf(anchor, sizeof(anchor), "%d.%d/d",
-           avg_tenths[latest] / 10, avg_tenths[latest] % 10);
-  graphics_context_set_text_color(ctx,
-      PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack));
-  graphics_draw_text(ctx, anchor,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(bounds.size.w - 44, 0, 44, 20),
-                     GTextOverflowModeTrailingEllipsis,
-                     GTextAlignmentRight, NULL);
-
   // ---- 6. Week-start date labels along the bottom ---------------------------
-  // 5 slots at ~28px each on basalt — "dd.mm" (5 chars) fits with GOTHIC_14.
 
   for (int i = 0; i < data->num_entries; i++) {
     char lbl[6];
@@ -190,13 +221,11 @@ static void anim_stopped(Animation *anim, bool finished, void *context) {
 
 static void history_layer_animate_in(HistoryLayer *layer) {
   HistoryLayerData *data = (HistoryLayerData *)layer_get_data(layer);
-
   if (data->animation) {
     animation_unschedule(data->animation);
     animation_destroy(data->animation);
     data->animation = NULL;
   }
-
   data->anim_progress = 0;
   layer_mark_dirty(layer);
 
@@ -206,10 +235,7 @@ static void history_layer_animate_in(HistoryLayer *layer) {
   animation_set_duration(anim, ANIM_DURATION_MS);
   animation_set_curve(anim, AnimationCurveEaseOut);
   animation_set_implementation(anim, &s_impl);
-  animation_set_handlers(anim, (AnimationHandlers){
-    .stopped = anim_stopped,
-  }, layer);
-
+  animation_set_handlers(anim, (AnimationHandlers){ .stopped = anim_stopped }, layer);
   data->animation = anim;
   animation_schedule(anim);
 }
@@ -221,7 +247,7 @@ static HistoryLayer *history_layer_create(GRect frame) {
       layer_create_with_data(frame, sizeof(HistoryLayerData));
   HistoryLayerData *data = (HistoryLayerData *)layer_get_data(layer);
   memset(data, 0, sizeof(HistoryLayerData));
-  data->anim_progress = 100;   // start fully drawn; animate_in resets to 0
+  data->anim_progress = 100;
   layer_set_update_proc(layer, history_layer_update_proc);
   return layer;
 }
@@ -242,7 +268,6 @@ static void history_layer_set_data(HistoryLayer *layer,
   HistoryLayerData *data = (HistoryLayerData *)layer_get_data(layer);
   if (num_entries < 0) num_entries = 0;
   if (num_entries > HISTORY_DISPLAY_WEEKS) {
-    // Take the most recent entries.
     entries    += (num_entries - HISTORY_DISPLAY_WEEKS);
     num_entries = HISTORY_DISPLAY_WEEKS;
   }
@@ -307,7 +332,6 @@ static void history_window_load(Window *window) {
   history_layer_set_data(s_history_layer, weeks, num_weeks);
 
   layer_add_child(window_layer, s_history_layer);
-
   history_layer_animate_in(s_history_layer);
 }
 
