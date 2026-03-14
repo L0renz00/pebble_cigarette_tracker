@@ -2,6 +2,7 @@
 #include "hourly_window.h"
 #include "alltime_window.h"
 #include "storage.h"
+#include "ui_util.h"
 
 // ============================================================
 // HourlyLayer — line chart of cigarettes per hour of day (0–23h).
@@ -60,7 +61,10 @@ static void hourly_layer_update_proc(Layer *layer, GContext *ctx) {
 
   // ---- Scaling --------------------------------------------------------------
 
-  int max_val = 1;
+  // Start at 0 so the first non-zero hour correctly becomes peak_h.
+  // max_val reaches at least 1 here because the total == 0 guard above
+  // has already ensured at least one cigarette is recorded this week.
+  int max_val = 0;
   int peak_h  = 0;
   for (int h = 0; h < 24; h++) {
     if (data->hist[h] > max_val) { max_val = data->hist[h]; peak_h = h; }
@@ -159,13 +163,6 @@ static TextLayer   *s_title_layer;
 static Layer       *s_title_rule_layer;
 static HourlyLayer *s_hourly_layer;
 
-static void title_rule_update_proc(Layer *layer, GContext *ctx) {
-  GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_stroke_color(ctx,
-      PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
-  graphics_draw_line(ctx, GPoint(0, 0), GPoint(bounds.size.w - 1, 0));
-}
-
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   alltime_window_push();
 }
@@ -195,7 +192,7 @@ static void hourly_window_load(Window *window) {
 
   s_title_rule_layer = layer_create(
       GRect(8, title_h, bounds.size.w - 16, 1));
-  layer_set_update_proc(s_title_rule_layer, title_rule_update_proc);
+  layer_set_update_proc(s_title_rule_layer, ui_rule_update_proc);
   layer_add_child(window_layer, s_title_rule_layer);
 
   int chart_y = title_h + 3;

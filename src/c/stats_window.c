@@ -3,6 +3,7 @@
 #include "storage.h"
 #include "graph_layer.h"
 #include "trend_window.h"
+#include "ui_util.h"
 
 static Window     *s_stats_window;
 static TextLayer  *s_title_layer;
@@ -24,15 +25,6 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_UP,   up_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
-}
-
-// --- Title rule --------------------------------------------------------------
-
-static void title_rule_update_proc(Layer *layer, GContext *ctx) {
-  GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_stroke_color(ctx,
-      PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
-  graphics_draw_line(ctx, GPoint(0, 0), GPoint(bounds.size.w - 1, 0));
 }
 
 // --- Window lifecycle --------------------------------------------------------
@@ -60,7 +52,7 @@ static void stats_window_load(Window *window) {
 
   s_title_rule_layer = layer_create(
       GRect(8, title_h, bounds.size.w - 16, 1));
-  layer_set_update_proc(s_title_rule_layer, title_rule_update_proc);
+  layer_set_update_proc(s_title_rule_layer, ui_rule_update_proc);
   layer_add_child(window_layer, s_title_rule_layer);
 
   int graph_y = title_h + 3;

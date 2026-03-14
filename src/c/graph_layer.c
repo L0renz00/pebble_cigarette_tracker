@@ -4,8 +4,8 @@
 // Total animation duration in milliseconds.
 #define ANIM_DURATION_MS  450
 // How many progress units (0..100) are reserved per bar for the stagger.
-// With 7 bars the last bar starts at 6*STAGGER = 42, leaving 58 units to
-// grow, which still feels snappy at EaseOut.
+// With 7 bars the last bar (index 6) starts at 6*ANIM_STAGGER = 36,
+// leaving 64 units to grow — still snappy at EaseOut.
 #define ANIM_STAGGER      6
 
 typedef struct {
