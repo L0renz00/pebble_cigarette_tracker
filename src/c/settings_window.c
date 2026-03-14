@@ -2,29 +2,15 @@
 #include "settings_window.h"
 #include "storage.h"
 #include "dialog_choice_window.h"
+#include "goal_window.h"
 #include "main.h"
 
 #define SETTINGS_NUM_ROWS    5
 #define SETTINGS_CELL_HEIGHT 44
 
-static Window       *s_settings_window;
-static MenuLayer    *s_menu_layer;
-static TextLayer    *s_hint_layer;
-static NumberWindow *s_goal_window = NULL;
-
-// --- Goal NumberWindow -------------------------------------------------------
-
-static void on_goal_window_unload(Window *window) {
-  if (s_goal_window) {
-    number_window_destroy(s_goal_window);
-    s_goal_window = NULL;
-  }
-}
-
-static void on_goal_selected(NumberWindow *nw, void *context) {
-  storage_set_goal((int)number_window_get_value(nw));
-  window_stack_pop(true);
-}
+static Window    *s_settings_window;
+static MenuLayer *s_menu_layer;
+static TextLayer *s_hint_layer;
 
 // --- Confirmation callbacks --------------------------------------------------
 
@@ -125,22 +111,9 @@ static void select_callback(struct MenuLayer *menu_layer,
         RESOURCE_ID_WARNING,
         on_delete_all_confirmed);
       break;
-    case 4: {
-      s_goal_window = number_window_create(
-        "Daily Goal",
-        (NumberWindowCallbacks){ .selected = on_goal_selected },
-        NULL);
-      number_window_set_min(s_goal_window, 0);
-      number_window_set_max(s_goal_window, 60);
-      number_window_set_step_size(s_goal_window, 1);
-      number_window_set_value(s_goal_window, storage_get_goal());
-      Window *nw_win = number_window_get_window(s_goal_window);
-      window_set_window_handlers(nw_win, (WindowHandlers){
-        .unload = on_goal_window_unload,
-      });
-      window_stack_push(nw_win, true);
+    case 4:
+      goal_window_push((int)storage_get_goal());
       break;
-    }
     default:
       break;
   }
