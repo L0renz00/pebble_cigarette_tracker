@@ -9,13 +9,16 @@ static Window      *s_main_window;
 static BitmapLayer *s_icon_layer;
 static GBitmap     *s_icon_bitmap;
 static TextLayer   *s_count_layer;
+static TextLayer   *s_goal_layer;
 static TextLayer   *s_last_time_layer;
 static TextLayer   *s_elapsed_layer;
 
 static int    s_count     = 0;
 static time_t s_last_time = 0;
+static int32_t s_goal     = 0;
 
 static char s_count_buf[16];
+static char s_goal_buf[12];
 static char s_last_time_buf[40];
 static char s_elapsed_buf[16];
 
@@ -36,9 +39,36 @@ static void format_elapsed(char *buf, size_t size, time_t last_time) {
 }
 
 static void update_display(void) {
+  // --- Goal color coding -----------------------------------------------
+  // Under by more than 2: black (no warning)
+  // Within 2 of goal:     orange (approaching)
+  // At or over goal:      red    (limit reached)
+  GColor accent = GColorBlack;
+  if (s_goal > 0) {
+    if (s_count >= s_goal)
+      accent = PBL_IF_COLOR_ELSE(GColorRed, GColorBlack);
+    else if (s_count >= s_goal - 2)
+      accent = PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack);
+  }
+
+  // --- Count -----------------------------------------------------------
   snprintf(s_count_buf, sizeof(s_count_buf), "%d", s_count);
   text_layer_set_text(s_count_layer, s_count_buf);
+  text_layer_set_text_color(s_count_layer, accent);
 
+  // --- Goal layer (replaces icon when goal is set) ---------------------
+  if (s_goal > 0) {
+    snprintf(s_goal_buf, sizeof(s_goal_buf), "of %d", (int)s_goal);
+    text_layer_set_text_color(s_goal_layer, accent);
+    text_layer_set_text(s_goal_layer, s_goal_buf);
+    layer_set_hidden(text_layer_get_layer(s_goal_layer), false);
+    layer_set_hidden(bitmap_layer_get_layer(s_icon_layer), true);
+  } else {
+    layer_set_hidden(text_layer_get_layer(s_goal_layer), true);
+    layer_set_hidden(bitmap_layer_get_layer(s_icon_layer), false);
+  }
+
+  // --- Last smoked / elapsed -------------------------------------------
   if (s_last_time == 0) {
     text_layer_set_text(s_last_time_layer, "Last Smoked @\n--:--");
   } else {
@@ -54,6 +84,7 @@ static void update_display(void) {
 
 void main_window_refresh(void) {
   storage_load(&s_count, &s_last_time);
+  s_goal = storage_get_goal();
   update_display();
 }
 
@@ -140,6 +171,15 @@ static void main_window_load(Window *window) {
   bitmap_layer_set_compositing_mode(s_icon_layer, GCompOpSet);
   layer_add_child(window_layer, bitmap_layer_get_layer(s_icon_layer));
 
+  // Goal layer occupies the same right-half slot as the icon; they are
+  // mutually exclusive — update_display() shows one and hides the other.
+  s_goal_layer = text_layer_create(GRect(half_w, block_y, half_w, slot_h));
+  text_layer_set_text_alignment(s_goal_layer, GTextAlignmentCenter);
+  text_layer_set_font(s_goal_layer,
+                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_background_color(s_goal_layer, GColorClear);
+  layer_add_child(window_layer, text_layer_get_layer(s_goal_layer));
+
   s_last_time_layer = text_layer_create(
       GRect(0, bounds.size.h * 5 / 12, bounds.size.w, bounds.size.h / 3));
   text_layer_set_text_alignment(s_last_time_layer, GTextAlignmentCenter);
@@ -163,6 +203,7 @@ static void main_window_unload(Window *window) {
   bitmap_layer_destroy(s_icon_layer);
   gbitmap_destroy(s_icon_bitmap);
   text_layer_destroy(s_count_layer);
+  text_layer_destroy(s_goal_layer);
   text_layer_destroy(s_last_time_layer);
   text_layer_destroy(s_elapsed_layer);
 }
@@ -171,6 +212,7 @@ static void main_window_unload(Window *window) {
 
 static void init(void) {
   storage_load(&s_count, &s_last_time);
+  s_goal = storage_get_goal();
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   accel_tap_service_subscribe(tap_handler);

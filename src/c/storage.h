@@ -3,7 +3,7 @@
 
 #define HISTORY_DAYS       7
 #define WEEK_HISTORY_COUNT 8    // weeks of rolling history kept
-#define STORAGE_VERSION    2
+#define STORAGE_VERSION    3
 
 typedef struct {
   int32_t day_timestamp;
@@ -18,6 +18,8 @@ typedef struct {
 
 void    storage_save(int count, time_t last_time);
 void    storage_load(int *count, time_t *last_time);
+void    storage_set_goal(int goal);
+int32_t storage_get_goal(void);
 void    storage_get_history(DayEntry *entries, int *num_entries);
 void    storage_get_week_history(WeekEntry *entries, int *num_entries);
 void    storage_seed_debug_data(void);

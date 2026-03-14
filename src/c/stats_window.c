@@ -3,6 +3,7 @@
 #include "storage.h"
 #include "graph_layer.h"
 #include "trend_window.h"
+#include "hourly_window.h"
 #include "ui_util.h"
 
 static Window     *s_stats_window;
@@ -18,13 +19,18 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   trend_window_push();
 }
 
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  hourly_window_push();
+}
+
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   window_stack_pop(true);
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_UP,   up_click_handler);
-  window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
+  window_single_click_subscribe(BUTTON_ID_UP,     up_click_handler);
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
 }
 
 // --- Window lifecycle --------------------------------------------------------
@@ -40,7 +46,7 @@ static void stats_window_load(Window *window) {
   strftime(end_str,   sizeof(end_str),   "%d.%m", localtime(&week_end));
   snprintf(s_title_buf, sizeof(s_title_buf), "%s - %s", start_str, end_str);
 
-  int title_h = bounds.size.h / 6;
+  int title_h = bounds.size.h / 7;
 
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, s_title_buf);

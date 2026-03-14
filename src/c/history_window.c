@@ -3,6 +3,7 @@
 #include "storage.h"
 #include "area_chart_layer.h"
 #include "ui_util.h"
+#include "main.h"
 
 // Only the most recent N completed weeks are shown — more than that and the
 // per-slot date labels become unreadably narrow on Basalt (144px / 5 = 28px).
@@ -29,10 +30,12 @@ static void build_history_chart_data(AreaChartData *cd,
     num_entries = HISTORY_DISPLAY_WEEKS;
   }
 
-  cd->total_slots   = num_entries;
-  cd->n             = num_entries;
-  cd->ring_idx      = (num_entries > 0) ? num_entries - 1 : -1;
-  cd->fill_color    = PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack);
+  cd->total_slots        = num_entries;
+  cd->n                  = num_entries;
+  cd->ring_idx           = (num_entries > 0) ? num_entries - 1 : -1;
+  cd->fill_color         = PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack);
+  cd->wide_bottom_labels = false;
+  cd->hide_avg_line      = false;
   cd->anchor_color  = PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack);
   cd->empty_message = "No history yet.\nCome back next\nweek!";
 
@@ -55,29 +58,43 @@ static void build_history_chart_data(AreaChartData *cd,
   }
 
   // Info strip labels — L omitted when there's only one distinct value.
+  // Whole parts are clamped to 3 digits and fractional parts cast to unsigned
+  // so the compiler can verify the snprintf output fits in AREA_CHART_INFO_LEN.
   bool single = (num_entries <= 1) || (max_idx == min_idx);
-  if (max_idx >= 0)
+  if (max_idx >= 0) {
+    int w = max_val / 10; if (w > 999) w = 999;
     snprintf(cd->h_label, AREA_CHART_INFO_LEN,
-             "H: %d.%d", max_val / 10, max_val % 10);
-  if (!single && min_idx >= 0)
+             "H: %d.%u", w, (unsigned)(max_val % 10));
+  }
+  if (!single && min_idx >= 0) {
+    int w = min_val / 10; if (w > 999) w = 999;
     snprintf(cd->l_label, AREA_CHART_INFO_LEN,
-             "L: %d.%d", min_val / 10, min_val % 10);
+             "L: %d.%u", w, (unsigned)(min_val % 10));
+  }
   if (cd->ring_idx >= 0) {
     int av = cd->y[cd->ring_idx];
+    int w = av / 10; if (w > 999) w = 999;
     snprintf(cd->anchor_label, AREA_CHART_INFO_LEN,
-             "%d.%d/d", av / 10, av % 10);
+             "%d.%u/d", w, (unsigned)(av % 10));
   }
 }
 
 // --- Click handlers ----------------------------------------------------------
 
-static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  Window *main = main_window_get();
+  while (window_stack_get_top_window() != main) {
+    window_stack_pop(false);
+  }
+}
+
+static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   window_stack_pop(true);
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_DOWN,   back_click_handler);
-  window_single_click_subscribe(BUTTON_ID_SELECT, back_click_handler);
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
 }
 
 // --- Window lifecycle --------------------------------------------------------
@@ -86,7 +103,7 @@ static void history_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
-  int title_h = bounds.size.h / 6;
+  int title_h = bounds.size.h / 7;
 
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, "Weekly Avg");

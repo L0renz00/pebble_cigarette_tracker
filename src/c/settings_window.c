@@ -4,12 +4,27 @@
 #include "dialog_choice_window.h"
 #include "main.h"
 
-#define SETTINGS_NUM_ROWS    4
+#define SETTINGS_NUM_ROWS    5
 #define SETTINGS_CELL_HEIGHT 44
 
-static Window    *s_settings_window;
-static MenuLayer *s_menu_layer;
-static TextLayer *s_hint_layer;
+static Window       *s_settings_window;
+static MenuLayer    *s_menu_layer;
+static TextLayer    *s_hint_layer;
+static NumberWindow *s_goal_window = NULL;
+
+// --- Goal NumberWindow -------------------------------------------------------
+
+static void on_goal_window_unload(Window *window) {
+  if (s_goal_window) {
+    number_window_destroy(s_goal_window);
+    s_goal_window = NULL;
+  }
+}
+
+static void on_goal_selected(NumberWindow *nw, void *context) {
+  storage_set_goal((int)number_window_get_value(nw));
+  window_stack_pop(true);
+}
 
 // --- Confirmation callbacks --------------------------------------------------
 
@@ -61,6 +76,14 @@ static void draw_row_callback(GContext *ctx, const Layer *cell_layer,
       menu_cell_basic_draw(ctx, cell_layer, "Clear Debug Data",
                            "Same as Delete All", NULL);
       break;
+    case 4: {
+      static char goal_sub[16];
+      int32_t g = storage_get_goal();
+      if (g > 0) snprintf(goal_sub, sizeof(goal_sub), "Current: %d", (int)g);
+      else        snprintf(goal_sub, sizeof(goal_sub), "Not set");
+      menu_cell_basic_draw(ctx, cell_layer, "Daily Goal", goal_sub, NULL);
+      break;
+    }
     default:
       break;
   }
@@ -102,6 +125,22 @@ static void select_callback(struct MenuLayer *menu_layer,
         RESOURCE_ID_WARNING,
         on_delete_all_confirmed);
       break;
+    case 4: {
+      s_goal_window = number_window_create(
+        "Daily Goal",
+        (NumberWindowCallbacks){ .selected = on_goal_selected },
+        NULL);
+      number_window_set_min(s_goal_window, 0);
+      number_window_set_max(s_goal_window, 60);
+      number_window_set_step_size(s_goal_window, 1);
+      number_window_set_value(s_goal_window, storage_get_goal());
+      Window *nw_win = number_window_get_window(s_goal_window);
+      window_set_window_handlers(nw_win, (WindowHandlers){
+        .unload = on_goal_window_unload,
+      });
+      window_stack_push(nw_win, true);
+      break;
+    }
     default:
       break;
   }

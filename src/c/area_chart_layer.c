@@ -77,7 +77,7 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
 
   // ---- 2. Dotted average line ----------------------------------------------
 
-  {
+  if (!d->chart.hide_avg_line) {
     int32_t sum = 0;
     for (int i = 0; i < ts; i++)
       if (d->chart.populated[i]) sum += d->chart.y[i];
@@ -107,11 +107,15 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   }
 
   // ---- 4. Dots — ring on the designated slot -------------------------------
+  //
+  // On dense charts (slot_w < 10, e.g. 24-slot hourly) skip non-ring dots to
+  // avoid a smeared blob of overlapping circles.
 
   for (int i = 0; i < ts; i++) {
     if (!d->chart.populated[i]) continue;
     int cx = SLOT_CX(i), y = Y_ANIM(d->chart.y[i]);
     bool ring = (i == d->chart.ring_idx);
+    if (!ring && slot_w < 10) continue;
     graphics_context_set_fill_color(ctx, GColorBlack);
     graphics_fill_circle(ctx, GPoint(cx, y), ring ? 4 : 3);
     if (ring) {
@@ -152,13 +156,19 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   }
 
   // ---- 6. Bottom labels per slot -------------------------------------------
+  //
+  // Normal mode: each label is drawn in its slot's rect (slot_w wide).
+  // Wide mode:   each label is centered at slot_cx with a 36px box — use this
+  //              when slot_w is too narrow for the font (e.g. 24-slot hourly).
 
   graphics_context_set_text_color(ctx,
       PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
   for (int i = 0; i < ts; i++) {
     if (!d->chart.bottom_labels[i][0]) continue;
+    int lw = d->chart.wide_bottom_labels ? 36 : slot_w;
+    int lx = d->chart.wide_bottom_labels ? (SLOT_CX(i) - lw / 2) : (i * slot_w);
     graphics_draw_text(ctx, d->chart.bottom_labels[i], label_font,
-                       GRect(i * slot_w, bounds.size.h - label_h, slot_w, label_h),
+                       GRect(lx, bounds.size.h - label_h, lw, label_h),
                        GTextOverflowModeTrailingEllipsis,
                        GTextAlignmentCenter, NULL);
   }

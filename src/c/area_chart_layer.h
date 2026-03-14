@@ -14,8 +14,8 @@
 // The layer stores a copy of AreaChartData internally, so the caller's struct
 // can go out of scope after set_data().
 
-#define AREA_CHART_MAX_SLOTS   7   // max columns (one per weekday or past week)
-#define AREA_CHART_LABEL_LEN   8   // bottom label per slot, e.g. "Mo", "13.03"
+#define AREA_CHART_MAX_SLOTS  24   // max columns (hourly = 24, weekly = 7, history = 8)
+#define AREA_CHART_LABEL_LEN   8   // bottom label per slot, e.g. "Mo", "13.03", "6am"
 #define AREA_CHART_INFO_LEN   12   // info strip strings, e.g. "H: 9.3", "13/d"
 
 typedef struct {
@@ -27,14 +27,17 @@ typedef struct {
 
   // ---- labels (pre-formatted by the window) --------------------------------
   char  bottom_labels[AREA_CHART_MAX_SLOTS][AREA_CHART_LABEL_LEN];
-  char  h_label[AREA_CHART_INFO_LEN];       // top-left,    e.g. "H: 17"
+  char  h_label[AREA_CHART_INFO_LEN];       // top-left,    "" = omit
   char  l_label[AREA_CHART_INFO_LEN];       // top-centre,  "" = omit
   char  anchor_label[AREA_CHART_INFO_LEN];  // top-right,   e.g. "13" or "9.3/d"
 
   // ---- visual --------------------------------------------------------------
-  int    ring_idx;       // slot index for the ring-dot; -1 = none
+  int    ring_idx;              // slot index for the ring-dot; -1 = none
   GColor fill_color;
-  GColor anchor_color;   // color for anchor_label text
+  GColor anchor_color;          // color for anchor_label text
+  bool   wide_bottom_labels;    // center each label at slot_cx with a 36px box
+                                // (use when slot_w is too narrow for the font)
+  bool   hide_avg_line;         // suppress the dotted average line
 
   // ---- empty state ---------------------------------------------------------
   const char *empty_message;   // displayed when n == 0; must be a static string

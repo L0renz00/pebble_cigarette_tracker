@@ -46,7 +46,7 @@ static void graph_layer_update_proc(Layer *layer, GContext *ctx) {
   int32_t today_start = (int32_t)mktime(now_tm);
 
   int row_h     = bounds.size.h / data->num_entries;
-  int label_w   = bounds.size.w * 9 / 20;
+  int label_w   = bounds.size.w / 5;
   int count_w   = bounds.size.w / 8;
   int padding   = 2;
   int max_bar_w = bounds.size.w - label_w - count_w - (padding * 3);
@@ -56,10 +56,11 @@ static void graph_layer_update_proc(Layer *layer, GContext *ctx) {
     int bar_h = row_h - (padding * 2);
 
     bool is_today = (data->entries[i].day_timestamp == today_start);
+    (void)is_today;  // only used inside PBL_IF_COLOR_ELSE; unused on B&W platforms
 
-    char date_str[12];
+    char date_str[4];
     time_t t = (time_t)data->entries[i].day_timestamp;
-    strftime(date_str, sizeof(date_str), "%a %d.%m", localtime(&t));
+    strftime(date_str, sizeof(date_str), "%a", localtime(&t));
 
     graphics_context_set_text_color(ctx,
         PBL_IF_COLOR_ELSE(is_today ? GColorBlueMoon : GColorBlack,

@@ -9,6 +9,7 @@
 #define KEY_TOTAL_DAYS       5
 #define KEY_WEEK_HISTORY     6   // WeekEntry[WEEK_HISTORY_COUNT]
 #define KEY_HOUR_HISTOGRAM   7   // uint8_t[24] — cigarettes per hour, this week
+#define KEY_DAILY_GOAL       8   // int32 — user's daily cigarette limit; 0 = disabled
 
 // --- Internal helpers --------------------------------------------------------
 
@@ -121,8 +122,15 @@ static void ensure_this_week(DayEntry *entries) {
 }
 
 static void check_version(void) {
-  if (!persist_exists(KEY_STORAGE_VERSION) ||
-      persist_read_int(KEY_STORAGE_VERSION) != STORAGE_VERSION) {
+  int stored = persist_exists(KEY_STORAGE_VERSION)
+               ? persist_read_int(KEY_STORAGE_VERSION) : 0;
+
+  if (stored == STORAGE_VERSION) return;
+
+  if (stored < 2) {
+    // Pre-v2 schema is incompatible — wipe all data keys and start fresh.
+    // This path is only taken on a first install or very old build; it does
+    // NOT apply to users already running v2 (who upgrade to v3 below).
     persist_delete(KEY_COUNT);
     persist_delete(KEY_LAST_TIME);
     persist_delete(KEY_HISTORY);
@@ -130,8 +138,13 @@ static void check_version(void) {
     persist_delete(KEY_TOTAL_DAYS);
     persist_delete(KEY_WEEK_HISTORY);
     persist_delete(KEY_HOUR_HISTOGRAM);
-    persist_write_int(KEY_STORAGE_VERSION, STORAGE_VERSION);
+    // KEY_DAILY_GOAL absent → storage_get_goal() returns 0 (disabled)
   }
+
+  // v2 → v3: the only addition is KEY_DAILY_GOAL.  All existing keys are
+  // untouched.  storage_get_goal() handles the absent key gracefully.
+
+  persist_write_int(KEY_STORAGE_VERSION, STORAGE_VERSION);
 }
 
 // --- Public API --------------------------------------------------------------
@@ -237,7 +250,8 @@ void storage_delete_all(void) {
   persist_delete(KEY_TOTAL_DAYS);
   persist_delete(KEY_WEEK_HISTORY);
   persist_delete(KEY_HOUR_HISTOGRAM);
-  // Keep KEY_STORAGE_VERSION.
+  // Intentionally keep KEY_STORAGE_VERSION and KEY_DAILY_GOAL — the user's
+  // goal setting should survive a data wipe.
 }
 
 // --- Hour histogram ----------------------------------------------------------
@@ -263,6 +277,16 @@ void storage_get_hour_histogram(uint8_t *out_24) {
 }
 
 
+
+// --- Daily goal --------------------------------------------------------------
+
+void storage_set_goal(int goal) {
+  persist_write_int(KEY_DAILY_GOAL, (int32_t)goal);
+}
+
+int32_t storage_get_goal(void) {
+  return persist_exists(KEY_DAILY_GOAL) ? persist_read_int(KEY_DAILY_GOAL) : 0;
+}
 
 // --- Seed / week start -------------------------------------------------------
 

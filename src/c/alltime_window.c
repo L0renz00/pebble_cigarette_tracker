@@ -27,19 +27,21 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   history_window_push();
 }
 
-static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
-  // Pop every carousel window above main without animation. Using a loop
-  // instead of a hardcoded count means this stays correct if the navigation
-  // depth ever changes (e.g. history window added to a different path).
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   Window *main = main_window_get();
   while (window_stack_get_top_window() != main) {
     window_stack_pop(false);
   }
 }
 
+static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  window_stack_pop(true);
+}
+
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_UP,   up_click_handler);
-  window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
+  window_single_click_subscribe(BUTTON_ID_UP,     up_click_handler);
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
 }
 
 // --- Divider layer -----------------------------------------------------------

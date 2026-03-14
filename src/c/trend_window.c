@@ -1,7 +1,6 @@
 #include <pebble.h>
 #include "trend_window.h"
 #include "hourly_window.h"
-#include "history_window.h"
 #include "storage.h"
 #include "area_chart_layer.h"
 #include "ui_util.h"
@@ -23,11 +22,13 @@ static void build_trend_chart_data(AreaChartData *cd,
                                     DayEntry *entries, int num_entries,
                                     time_t week_start) {
   memset(cd, 0, sizeof(AreaChartData));
-  cd->total_slots   = HISTORY_DAYS;
-  cd->ring_idx      = -1;
-  cd->fill_color    = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
-  cd->anchor_color  = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
-  cd->empty_message = "No data yet.";
+  cd->total_slots        = HISTORY_DAYS;
+  cd->ring_idx           = -1;
+  cd->fill_color         = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
+  cd->anchor_color       = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
+  cd->empty_message      = "No data yet.";
+  cd->wide_bottom_labels = false;
+  cd->hide_avg_line      = false;
 
   static const char * const day_labels[HISTORY_DAYS] = {
     "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"
@@ -72,22 +73,17 @@ static void build_trend_chart_data(AreaChartData *cd,
 
 // --- Click handlers ----------------------------------------------------------
 
-static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  history_window_push();
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  hourly_window_push();
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   window_stack_pop(true);
 }
 
-static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  hourly_window_push();
-}
-
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_UP,     up_click_handler);
-  window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
 }
 
 // --- Window lifecycle --------------------------------------------------------
@@ -103,7 +99,7 @@ static void trend_window_load(Window *window) {
   strftime(end_str,   sizeof(end_str),   "%d.%m", localtime(&week_end));
   snprintf(s_title_buf, sizeof(s_title_buf), "%s - %s", start_str, end_str);
 
-  int title_h = bounds.size.h / 6;
+  int title_h = bounds.size.h / 7;
 
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, s_title_buf);
