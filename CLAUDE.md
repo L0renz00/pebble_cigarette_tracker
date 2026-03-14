@@ -10,9 +10,9 @@ platforms in `package.json` are bonus coverage.
 
 ## Build & deploy
 
-CloudPebble project — no local toolchain. All source files in `src/c/` (flat
-structure required). Upload changed `.c`/`.h` files via CloudPebble UI. The
-`wscript` globs all `src/c/**/*.c` automatically; new files need no wscript edit.
+Former CloudPebble project — now local. All source files in `src/c/`.
+Theoretically, building is possible with the pebble cli. Leave building and testing
+to the user. The `wscript` globs all `src/c/**/*.c` automatically; new files need no wscript edit.
 
 ---
 
@@ -134,7 +134,7 @@ while (window_stack_get_top_window() != main) { window_stack_pop(false); }
 - **`KEY_TOTAL_DAYS` incremented only in `ensure_this_week()`.**
 - **`KEY_HOUR_HISTOGRAM` reset only in `ensure_this_week()`.**
 - **No hardcoded window-stack depths.** Use `main_window_get()` + loop.
-- **All layout proportional.**
+- **All layout proportional, using content size api for fonts**
 - **Layer destroys its own animation before `layer_destroy()`.**
 
 ---
