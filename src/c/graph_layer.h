@@ -13,3 +13,6 @@ void        graph_layer_set_data(GraphLayer *layer,
 
 // Triggers a staggered bar-grow animation. Call once after layer_add_child.
 void        graph_layer_animate_in(GraphLayer *layer);
+
+// Set the daily goal threshold; bars exceeding it are drawn red. 0 = disabled.
+void        graph_layer_set_daily_goal(GraphLayer *layer, int32_t goal);

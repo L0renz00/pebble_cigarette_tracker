@@ -11,6 +11,7 @@
 typedef struct {
   DayEntry entries[HISTORY_DAYS];
   int      num_entries;
+  int32_t  daily_goal;       // 0 = disabled
   // Animation progress in [0, 100].  100 = fully drawn (steady state).
   int16_t  anim_progress;
   Animation *animation;
@@ -87,9 +88,14 @@ static void graph_layer_update_proc(Layer *layer, GContext *ctx) {
     int bar_w = (full_bar_w * local_p) / bar_range;
 
     if (bar_w > 0) {
-      graphics_context_set_fill_color(ctx,
-          PBL_IF_COLOR_ELSE(is_today ? GColorBlueMoon : GColorOrange,
-                            GColorBlack));
+      bool over_goal = data->daily_goal > 0 &&
+                       (int)data->entries[i].count > (int)data->daily_goal;
+      GColor bar_color = PBL_IF_COLOR_ELSE(
+          over_goal  ? GColorRed :
+          is_today   ? GColorBlueMoon :
+                       GColorOrange,
+          GColorBlack);
+      graphics_context_set_fill_color(ctx, bar_color);
       graphics_fill_rect(ctx,
                          GRect(label_w + padding, y + padding, bar_w, bar_h),
                          2, GCornersAll);
@@ -162,6 +168,12 @@ void graph_layer_set_data(GraphLayer *layer,
   if (num_entries > HISTORY_DAYS) num_entries = HISTORY_DAYS;
   memcpy(data->entries, entries, sizeof(DayEntry) * num_entries);
   data->num_entries = num_entries;
+  layer_mark_dirty(layer);
+}
+
+void graph_layer_set_daily_goal(GraphLayer *layer, int32_t goal) {
+  GraphLayerData *data = (GraphLayerData *)layer_get_data(layer);
+  data->daily_goal = goal;
   layer_mark_dirty(layer);
 }
 

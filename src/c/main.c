@@ -155,6 +155,19 @@ static void main_window_load(Window *window) {
   int icon_size = 25;
   int half_w    = bounds.size.w / 2;
 
+  GFont label_font, value_font;
+  switch (preferred_content_size()) {
+    case PreferredContentSizeLarge:
+    case PreferredContentSizeExtraLarge:
+      label_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+      value_font = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
+      break;
+    default:
+      label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+      value_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+      break;
+  }
+
   s_count_layer = text_layer_create(GRect(0, block_y, half_w, slot_h));
   text_layer_set_text_alignment(s_count_layer, GTextAlignmentCenter);
   text_layer_set_font(s_count_layer,
@@ -175,24 +188,21 @@ static void main_window_load(Window *window) {
   // mutually exclusive — update_display() shows one and hides the other.
   s_goal_layer = text_layer_create(GRect(half_w, block_y, half_w, slot_h));
   text_layer_set_text_alignment(s_goal_layer, GTextAlignmentCenter);
-  text_layer_set_font(s_goal_layer,
-                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_font(s_goal_layer, label_font);
   text_layer_set_background_color(s_goal_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_goal_layer));
 
   s_last_time_layer = text_layer_create(
       GRect(0, bounds.size.h * 5 / 12, bounds.size.w, bounds.size.h / 3));
   text_layer_set_text_alignment(s_last_time_layer, GTextAlignmentCenter);
-  text_layer_set_font(s_last_time_layer,
-                      fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_last_time_layer, value_font);
   text_layer_set_background_color(s_last_time_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_last_time_layer));
 
   s_elapsed_layer = text_layer_create(
       GRect(0, bounds.size.h * 3 / 4, bounds.size.w, slot_h));
   text_layer_set_text_alignment(s_elapsed_layer, GTextAlignmentCenter);
-  text_layer_set_font(s_elapsed_layer,
-                      fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_elapsed_layer, value_font);
   text_layer_set_background_color(s_elapsed_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_elapsed_layer));
 

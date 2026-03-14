@@ -291,7 +291,8 @@ int32_t storage_get_goal(void) {
 // --- Seed / week start -------------------------------------------------------
 
 void storage_seed_debug_data(void) {
-  const int fake_counts[HISTORY_DAYS] = { 4, 13, 9, 17, 11, 6, 5 };
+  // Mon–Fri ~13–15 cigs, Sat–Sun ~10–11 — typical moderate smoker pattern.
+  const int fake_counts[HISTORY_DAYS] = { 14, 13, 15, 12, 16, 11, 10 };
   time_t now         = time(NULL);
   time_t today_start = get_day_start(now);
   time_t week_start  = get_week_start(now);
@@ -306,14 +307,17 @@ void storage_seed_debug_data(void) {
   }
   persist_write_data(KEY_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
 
+  // 7 prior weeks, Mon–Sun.  Weekdays 11–16, weekends 8–12.
+  // Slight upward drift toward the present is intentional — makes the
+  // weekly-averages chart visually interesting with a clear trend.
   const int prior_week_data[7][7] = {
-    {  8, 12, 10, 14,  9,  7,  6 },
-    { 11,  9, 13, 12, 10,  8,  7 },
-    {  7, 10,  8, 11,  9,  6,  5 },
-    { 12, 14, 11, 15, 13, 10,  9 },
-    {  9,  8, 10,  7,  9,  5,  4 },
-    {  6,  9,  7, 10,  8,  5,  3 },
-    {  5,  8,  6,  9,  7,  4,  3 },
+    { 10, 11,  9, 12, 10,  8,  8 },  // 7 weeks ago  avg ~9.7
+    { 11, 12, 10, 13, 11,  9,  8 },  // 6 weeks ago  avg ~10.6
+    { 12, 11, 13, 12, 14,  9,  9 },  // 5 weeks ago  avg ~11.4
+    { 13, 12, 14, 11, 13, 10,  9 },  // 4 weeks ago  avg ~11.7
+    { 14, 13, 12, 15, 13, 11, 10 },  // 3 weeks ago  avg ~12.6
+    { 13, 15, 14, 13, 16, 11, 10 },  // 2 weeks ago  avg ~13.1
+    { 14, 13, 15, 14, 16, 11, 10 },  // last week    avg ~13.3
   };
 
   WeekEntry weeks[WEEK_HISTORY_COUNT];
@@ -337,15 +341,20 @@ void storage_seed_debug_data(void) {
   persist_write_int(KEY_TOTAL,      week_sum + prior_total);
   persist_write_int(KEY_TOTAL_DAYS, (7 * 7) + today_slot + 1);
   persist_write_int(KEY_COUNT,      fake_counts[today_slot]);
-  persist_write_int(KEY_LAST_TIME,  (int32_t)(time(NULL) - 47 * 60));
+  // Last cigarette ~25 minutes ago — plausible mid-session gap.
+  persist_write_int(KEY_LAST_TIME,  (int32_t)(time(NULL) - 25 * 60));
 
-  // Hourly histogram — realistic bell curve with morning + afternoon peaks.
-  // Values represent cigarettes across this week (not a single day), giving
-  // the chart meaningful variation without looking artificial.
+  // Hourly histogram — weekly totals for a ~13 cig/day moderate smoker.
+  // Four natural peaks: morning routine (7h), work break (10h),
+  // lunch (12h), post-work (17h).  Near-zero midnight–6h (sleep).
   const uint8_t fake_hist[24] = {
-    0, 0, 0, 0, 0, 0, 1, 2,   // 0–7h  (night / early morning)
-    4, 6, 9, 7, 4, 5, 6, 11,  // 8–15h (mid-morning peak at 10h, pm peak at 15h)
-    8, 5, 4, 3, 2, 2, 1, 0    // 16–23h (evening taper)
+    0, 0, 0, 0, 0, 1,   //  0– 5h  asleep
+    2, 5,               //  6– 7h  wake-up, first cigarette
+    6, 7, 9, 6,         //  8–11h  morning work block, peak at 10h
+    8, 6,               // 12–13h  lunch break
+    6, 7, 7,            // 14–16h  afternoon work block
+    9, 7, 6,            // 17–19h  post-work / commute peak
+    5, 4, 3, 1,         // 20–23h  evening taper
   };
   persist_write_data(KEY_HOUR_HISTOGRAM, fake_hist, sizeof(fake_hist));
 }

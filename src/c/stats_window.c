@@ -48,11 +48,21 @@ static void stats_window_load(Window *window) {
 
   int title_h = bounds.size.h / 7;
 
+  GFont title_font;
+  switch (preferred_content_size()) {
+    case PreferredContentSizeLarge:
+    case PreferredContentSizeExtraLarge:
+      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+      break;
+    default:
+      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+      break;
+  }
+
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, s_title_buf);
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
-  text_layer_set_font(s_title_layer,
-                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_font(s_title_layer, title_font);
   text_layer_set_background_color(s_title_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
@@ -71,6 +81,7 @@ static void stats_window_load(Window *window) {
   int num_entries;
   storage_get_history(entries, &num_entries);
   graph_layer_set_data(s_graph_layer, entries, num_entries);
+  graph_layer_set_daily_goal(s_graph_layer, storage_get_goal());
 
   layer_add_child(window_layer, s_graph_layer);
 

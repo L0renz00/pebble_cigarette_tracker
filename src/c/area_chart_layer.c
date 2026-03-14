@@ -16,11 +16,25 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   AreaChartLayerData *d = (AreaChartLayerData *)layer_get_data(layer);
   GRect bounds = layer_get_bounds(layer);
 
+  GFont anchor_font;
+  int   info_h;
+  switch (preferred_content_size()) {
+    case PreferredContentSizeLarge:
+    case PreferredContentSizeExtraLarge:
+      anchor_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+      info_h = 24;
+      break;
+    default:
+      anchor_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+      info_h = 18;
+      break;
+  }
+
   if (d->chart.n == 0) {
     graphics_context_set_text_color(ctx, GColorBlack);
     graphics_draw_text(ctx,
         d->chart.empty_message ? d->chart.empty_message : "No data yet.",
-        fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+        anchor_font,
         bounds, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
     return;
   }
@@ -30,7 +44,6 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   GFont label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
   GFont info_font  = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   const int label_h = 14;
-  const int info_h  = 18;
   const int ts      = d->chart.total_slots;
   const int slot_w  = bounds.size.w / ts;
 
@@ -41,16 +54,26 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   GColor bg = PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite);
   int    p  = d->anim_progress;   // 0–100
 
-  // Max y value for scaling — floor at 1 to avoid division by zero.
-  int max_y = 1;
+  // Dynamic display range: track both min and max, then add padding.
+  int max_y = 0, min_y = 0;
+  bool has_data = false;
   for (int i = 0; i < ts; i++) {
-    if (d->chart.populated[i] && d->chart.y[i] > max_y)
-      max_y = d->chart.y[i];
+    if (d->chart.populated[i]) {
+      if (!has_data || d->chart.y[i] > max_y) max_y = d->chart.y[i];
+      if (!has_data || d->chart.y[i] < min_y) min_y = d->chart.y[i];
+      has_data = true;
+    }
   }
+  int range         = (max_y > min_y) ? (max_y - min_y) : 1;
+  int pad           = (range > 3) ? range / 4 : 1;
+  int display_max   = max_y + pad;
+  int display_min   = (min_y >= pad) ? min_y - pad : 0;
+  if (display_max == display_min) display_max = display_min + 1;
+  int display_range = display_max - display_min;
 
   // Convenience macros — undef'd at the end of the proc.
 #define SLOT_CX(i)   ((i) * slot_w + slot_w / 2)
-#define Y_FULL(v)    (plot_bottom - ((v) * plot_h / max_y))
+#define Y_FULL(v)    (plot_bottom - (((v) - display_min) * plot_h / display_range))
 #define Y_ANIM(v)    (plot_bottom - ((plot_bottom - Y_FULL(v)) * p / 100))
 
   // ---- 1. Filled area path -------------------------------------------------
@@ -81,10 +104,10 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
     int32_t sum = 0;
     for (int i = 0; i < ts; i++)
       if (d->chart.populated[i]) sum += d->chart.y[i];
-    int avg_y_full = plot_bottom - (int)(sum * plot_h / (d->chart.n * max_y));
+    int avg_y_full = plot_bottom - (int)((sum - (int32_t)d->chart.n * display_min) * plot_h / ((int32_t)d->chart.n * display_range));
     int avg_y      = plot_bottom - ((plot_bottom - avg_y_full) * p / 100);
     graphics_context_set_stroke_color(ctx,
-        PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
+        PBL_IF_COLOR_ELSE(GColorBlack, GColorBlack));
     for (int x = 0; x < bounds.size.w; x += 6) {
       int x2 = x + 2;
       if (x2 >= bounds.size.w) x2 = bounds.size.w - 1;
@@ -97,6 +120,7 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   {
     int prev_x = -1, prev_y = -1;
     graphics_context_set_stroke_color(ctx, GColorBlack);
+    graphics_context_set_stroke_width(ctx, 2);
     for (int i = 0; i < ts; i++) {
       if (!d->chart.populated[i]) { prev_x = -1; prev_y = -1; continue; }
       int cx = SLOT_CX(i), y = Y_ANIM(d->chart.y[i]);
@@ -148,7 +172,7 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
     if (d->chart.anchor_label[0]) {
       graphics_context_set_text_color(ctx, d->chart.anchor_color);
       graphics_draw_text(ctx, d->chart.anchor_label,
-                         fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                         anchor_font,
                          GRect(bounds.size.w - 44, 0, 44, info_h),
                          GTextOverflowModeTrailingEllipsis,
                          GTextAlignmentRight, NULL);
@@ -162,7 +186,7 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   //              when slot_w is too narrow for the font (e.g. 24-slot hourly).
 
   graphics_context_set_text_color(ctx,
-      PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack));
+      PBL_IF_COLOR_ELSE(GColorBlack, GColorBlack));
   for (int i = 0; i < ts; i++) {
     if (!d->chart.bottom_labels[i][0]) continue;
     int lw = d->chart.wide_bottom_labels ? 36 : slot_w;
