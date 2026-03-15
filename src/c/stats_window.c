@@ -2,7 +2,7 @@
 #include "stats_window.h"
 #include "storage.h"
 #include "graph_layer.h"
-#include "trend_window.h"
+#include "history_window.h"
 #include "hourly_window.h"
 #include "ui_util.h"
 
@@ -16,7 +16,7 @@ static char s_title_buf[24];
 // --- Click handlers ----------------------------------------------------------
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  trend_window_push();
+  history_window_push();
 }
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {

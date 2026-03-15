@@ -36,6 +36,7 @@ typedef struct {
   char   ring_label[8];         // drawn above the ring-dot; "" = omit
   GColor fill_color;
   GColor anchor_color;          // color for anchor_label text
+  int    goal;                  // if > 0, draw a solid red goal line at this y-value
   bool   wide_bottom_labels;    // center each label at slot_cx with a 36px box
                                 // (use when slot_w is too narrow for the font)
   bool   hide_avg_line;         // suppress the dotted average line

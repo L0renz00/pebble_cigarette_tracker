@@ -118,7 +118,20 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
     }
   }
 
-  // ---- 3. Connecting line --------------------------------------------------
+  // ---- 3. Goal line --------------------------------------------------------
+
+  if (d->chart.goal > 0) {
+    int goal_y_full = Y_FULL(d->chart.goal);
+    if (goal_y_full >= plot_top && goal_y_full <= plot_bottom) {
+      int goal_y = plot_bottom - ((plot_bottom - goal_y_full) * p / 100);
+      graphics_context_set_stroke_color(ctx, PBL_IF_COLOR_ELSE(GColorRed, GColorBlack));
+      graphics_context_set_stroke_width(ctx, 2);
+      graphics_draw_line(ctx, GPoint(0, goal_y), GPoint(bounds.size.w, goal_y));
+      graphics_context_set_stroke_width(ctx, 1);
+    }
+  }
+
+  // ---- 4. Connecting line --------------------------------------------------
 
   {
     int prev_x = -1, prev_y = -1;
@@ -218,20 +231,32 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
 
   // ---- 7. Y-axis labels (adaptive) -------------------------------------------
   //
-  // Drawn last so they appear on top of the fill.  Step size is chosen to
-  // produce 2–4 ticks (0 … max_y).  Uses Y_FULL so labels stay fixed during
-  // the grow-from-baseline animation.
+  // Drawn last so they appear on top of the fill.  Step size targets 3–5 ticks
+  // across the padded display range (display_min…display_max).  Ticks start at
+  // the first clean multiple of y_step that falls within the display range.
+  // Uses Y_FULL so labels stay fixed during the grow-from-baseline animation.
 
   if (d->chart.show_y_axis && left_margin > 0) {
+    // ceil(display_range / 4) gives a raw step that yields at most ~5 labels;
+    // round up to the nearest "nice" value so numbers stay legible.
+    int raw_step = (display_range + 3) / 4;
+    if (raw_step < 1) raw_step = 1;
     int y_step;
-    if      (max_y <= 2)  y_step = 1;
-    else if (max_y <= 5)  y_step = 2;
-    else if (max_y <= 10) y_step = 5;
-    else                  y_step = 10;
+    if      (raw_step <= 1)  y_step = 1;
+    else if (raw_step <= 2)  y_step = 2;
+    else if (raw_step <= 5)  y_step = 5;
+    else if (raw_step <= 10) y_step = 10;
+    else if (raw_step <= 20) y_step = 20;
+    else if (raw_step <= 25) y_step = 25;
+    else if (raw_step <= 50) y_step = 50;
+    else                     y_step = 100;
+
+    // First tick at lowest multiple of y_step >= display_min.
+    int tick_start = ((display_min + y_step - 1) / y_step) * y_step;
 
     GFont y_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
     graphics_context_set_text_color(ctx, GColorBlack);
-    for (int tick = 0; tick <= max_y; tick += y_step) {
+    for (int tick = tick_start; tick <= display_max; tick += y_step) {
       int ty = Y_FULL(tick);
       if (ty < plot_top || ty > plot_bottom) continue;
       char buf[6];

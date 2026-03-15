@@ -1,5 +1,6 @@
 #include <pebble.h>
 #include "trend_window.h"
+#include "stats_window.h"
 #include "hourly_window.h"
 #include "storage.h"
 #include "area_chart_layer.h"
@@ -25,10 +26,10 @@ static void build_trend_chart_data(AreaChartData *cd,
   cd->total_slots        = HISTORY_DAYS;
   cd->ring_idx           = -1;
   cd->fill_color         = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
-  cd->anchor_color       = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
   cd->empty_message      = "No data yet.";
   cd->wide_bottom_labels = false;
-  cd->hide_avg_line      = false;
+  cd->hide_avg_line      = true;
+  cd->show_y_axis        = true;
 
   static const char * const day_labels[HISTORY_DAYS] = {
     "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"
@@ -45,10 +46,8 @@ static void build_trend_chart_data(AreaChartData *cd,
   int today_slot = (int)((today_start - week_start) / (24 * 60 * 60));
   if (today_slot >= 0 && today_slot < HISTORY_DAYS) cd->ring_idx = today_slot;
 
-  // Map each DayEntry to its weekday slot, tracking H/L for the info strip.
-  int max_val = 0, min_val = INT32_MAX;
-  int max_slot = -1, min_slot = -1;
-
+  // Map each DayEntry to its weekday slot; accumulate total for avg.
+  int total = 0;
   for (int i = 0; i < num_entries; i++) {
     int slot = (int)(((time_t)entries[i].day_timestamp - week_start)
                      / (24 * 60 * 60));
@@ -57,18 +56,15 @@ static void build_trend_chart_data(AreaChartData *cd,
     cd->y[slot]         = v;
     cd->populated[slot] = true;
     cd->n++;
-    if (max_slot < 0 || v > max_val) { max_val = v; max_slot = slot; }
-    if (min_slot < 0 || v < min_val) { min_val = v; min_slot = slot; }
+    total += v;
   }
 
-  // Info strip labels — L omitted when there's only one distinct value.
-  if (max_slot >= 0)
-    snprintf(cd->h_label, AREA_CHART_INFO_LEN, "H: %d", max_val);
-  if (max_slot != min_slot && min_slot >= 0)
-    snprintf(cd->l_label, AREA_CHART_INFO_LEN, "L: %d", min_val);
-  if (cd->ring_idx >= 0 && cd->populated[cd->ring_idx])
-    snprintf(cd->anchor_label, AREA_CHART_INFO_LEN, "%d",
-             cd->y[cd->ring_idx]);
+  // Info strip: weekly average per day (one decimal place), e.g. "Avg: 9.3/d".
+  if (cd->n > 0) {
+    int avg_int  = total / cd->n;
+    int avg_frac = (total * 10 / cd->n) % 10;
+    snprintf(cd->h_label, AREA_CHART_INFO_LEN, "Avg: %d.%d/d", avg_int, avg_frac);
+  }
 }
 
 // --- Click handlers ----------------------------------------------------------
@@ -77,11 +73,16 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   hourly_window_push();
 }
 
+static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  stats_window_push();
+}
+
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   window_stack_pop(true);
 }
 
 static void click_config_provider(void *context) {
+  window_single_click_subscribe(BUTTON_ID_UP,     up_click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
 }
@@ -137,6 +138,7 @@ static void trend_window_load(Window *window) {
 
   AreaChartData cd;
   build_trend_chart_data(&cd, entries, num_entries, week_start);
+  cd.goal = (int)storage_get_goal();
   area_chart_layer_set_data(s_chart_layer, &cd);
 
   layer_add_child(window_layer, s_chart_layer);

@@ -1,6 +1,6 @@
 #include <pebble.h>
 #include "storage.h"
-#include "stats_window.h"
+#include "trend_window.h"
 #include "confirm_window.h"
 #include "settings_window.h"
 #include "main.h"
@@ -118,7 +118,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  stats_window_push();
+  trend_window_push();
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
