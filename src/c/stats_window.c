@@ -8,7 +8,7 @@
 
 static Window     *s_stats_window;
 static TextLayer  *s_title_layer;
-static Layer      *s_title_rule_layer;
+static Layer      *s_title_bg_layer;
 static GraphLayer *s_graph_layer;
 
 static char s_title_buf[24];
@@ -59,19 +59,20 @@ static void stats_window_load(Window *window) {
       break;
   }
 
+  s_title_bg_layer = layer_create(GRect(0, 0, bounds.size.w, title_h));
+  layer_set_update_proc(s_title_bg_layer, ui_title_bar_update_proc);
+  layer_add_child(window_layer, s_title_bg_layer);
+
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, s_title_buf);
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   text_layer_set_font(s_title_layer, title_font);
+  text_layer_set_text_color(s_title_layer,
+      PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite));
   text_layer_set_background_color(s_title_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  s_title_rule_layer = layer_create(
-      GRect(8, title_h, bounds.size.w - 16, 1));
-  layer_set_update_proc(s_title_rule_layer, ui_rule_update_proc);
-  layer_add_child(window_layer, s_title_rule_layer);
-
-  int graph_y = title_h + 3;
+  int graph_y = title_h;
   GRect graph_frame = GRect(4, graph_y,
                             bounds.size.w - 8,
                             bounds.size.h - graph_y - 2);
@@ -91,7 +92,7 @@ static void stats_window_load(Window *window) {
 
 static void stats_window_unload(Window *window) {
   text_layer_destroy(s_title_layer);
-  layer_destroy(s_title_rule_layer);
+  layer_destroy(s_title_bg_layer);
   graph_layer_destroy(s_graph_layer);
   window_destroy(s_stats_window);
   s_stats_window = NULL;

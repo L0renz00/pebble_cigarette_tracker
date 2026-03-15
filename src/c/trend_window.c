@@ -7,7 +7,7 @@
 
 static Window         *s_trend_window;
 static TextLayer      *s_title_layer;
-static Layer          *s_title_rule_layer;
+static Layer          *s_title_bg_layer;
 static AreaChartLayer *s_chart_layer;
 
 static char s_title_buf[24];
@@ -112,18 +112,20 @@ static void trend_window_load(Window *window) {
       break;
   }
 
+  s_title_bg_layer = layer_create(GRect(0, 0, bounds.size.w, title_h));
+  layer_set_update_proc(s_title_bg_layer, ui_title_bar_update_proc);
+  layer_add_child(window_layer, s_title_bg_layer);
+
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, s_title_buf);
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   text_layer_set_font(s_title_layer, title_font);
+  text_layer_set_text_color(s_title_layer,
+      PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite));
   text_layer_set_background_color(s_title_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  s_title_rule_layer = layer_create(GRect(8, title_h, bounds.size.w - 16, 1));
-  layer_set_update_proc(s_title_rule_layer, ui_rule_update_proc);
-  layer_add_child(window_layer, s_title_rule_layer);
-
-  int chart_y = title_h + 3;
+  int chart_y = title_h;
   GRect chart_frame = GRect(4, chart_y,
                             bounds.size.w - 8,
                             bounds.size.h - chart_y - 2);
@@ -143,7 +145,7 @@ static void trend_window_load(Window *window) {
 
 static void trend_window_unload(Window *window) {
   text_layer_destroy(s_title_layer);
-  layer_destroy(s_title_rule_layer);
+  layer_destroy(s_title_bg_layer);
   area_chart_layer_destroy(s_chart_layer);
   window_destroy(s_trend_window);
   s_trend_window = NULL;

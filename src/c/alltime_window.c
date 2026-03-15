@@ -99,20 +99,22 @@ static void alltime_window_load(Window *window) {
   PreferredContentSize cs = preferred_content_size();
 
   GFont label_font, value_font;
-  int   label_px, value_px;
-  const int unit_px = 14;
+  int   label_px, value_px, value_top_pad;
+  // 18px for GOTHIC_14: the nominal 14 is cap height; descenders (e.g. 'g' in
+  // "cigarettes") extend ~4px below baseline, matching GOTHIC_14_BOLD's label_px.
+  const int unit_px = 18;
 
   switch (cs) {
     case PreferredContentSizeLarge:
     case PreferredContentSizeExtraLarge:
       label_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
       value_font = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
-      label_px = 24; value_px = 34;
+      label_px = 24; value_px = 34; value_top_pad = 10;
       break;
     default: // Small, Medium
       label_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
       value_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
-      label_px = 18; value_px = 28;
+      label_px = 18; value_px = 28; value_top_pad = 10;
       break;
   }
 
@@ -161,8 +163,10 @@ static void alltime_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_total_value));
 
   if (show_unit) {
-    s_total_unit = text_layer_create(
-        GRect(pad, r0_top + label_px + value_px, w, unit_px));
+    // The value font has built-in top padding; subtract it so the unit label
+    // sits snugly below the visible value glyphs instead of below the padding.
+    int unit_y = r0_top + label_px + value_px - value_top_pad;
+    s_total_unit = text_layer_create(GRect(pad, unit_y, w, unit_px));
     text_layer_set_text(s_total_unit, "cigarettes");
     text_layer_set_font(s_total_unit, unit_font);
     text_layer_set_text_color(s_total_unit, row0_text);

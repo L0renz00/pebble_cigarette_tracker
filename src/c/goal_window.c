@@ -16,7 +16,7 @@
 static Window    *s_goal_window;
 static Layer     *s_selection_layer;
 static TextLayer *s_title_layer;
-static Layer     *s_rule_layer;
+static Layer     *s_title_bg_layer;
 static TextLayer *s_prompt_layer;
 
 static int  s_digits[GOAL_NUM_CELLS]; // [0]=tens, [1]=units
@@ -65,23 +65,25 @@ static void goal_window_load(Window *window) {
   int title_h  = bounds.size.h / 7;
   int prompt_h = bounds.size.h / 6;
 
+  // Title background (inverted accent bar)
+  s_title_bg_layer = layer_create(GRect(0, 0, bounds.size.w, title_h));
+  layer_set_update_proc(s_title_bg_layer, ui_title_bar_update_proc);
+  layer_add_child(window_layer, s_title_bg_layer);
+
   // Title
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
   text_layer_set_text(s_title_layer, "Daily Goal");
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   text_layer_set_font(s_title_layer,
                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_text_color(s_title_layer,
+      PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite));
   text_layer_set_background_color(s_title_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  // Horizontal rule under title
-  s_rule_layer = layer_create(GRect(8, title_h, bounds.size.w - 16, 1));
-  layer_set_update_proc(s_rule_layer, ui_rule_update_proc);
-  layer_add_child(window_layer, s_rule_layer);
-
   // Prompt
   s_prompt_layer = text_layer_create(
-      GRect(0, title_h + 2, bounds.size.w, prompt_h));
+      GRect(0, title_h, bounds.size.w, prompt_h));
   text_layer_set_text(s_prompt_layer, "Pick a daily goal");
   text_layer_set_text_alignment(s_prompt_layer, GTextAlignmentCenter);
   text_layer_set_font(s_prompt_layer,
@@ -95,7 +97,7 @@ static void goal_window_load(Window *window) {
   int sel_h = 38;
   int sel_w = GOAL_NUM_CELLS * GOAL_CELL_W + (GOAL_NUM_CELLS - 1) * GOAL_CELL_PAD;
   int sel_x = (bounds.size.w - sel_w) / 2;
-  int top_used = title_h + 1 + prompt_h + 2; // title + rule + prompt + gap
+  int top_used = title_h + prompt_h; // title bar + prompt
   int sel_y = top_used + (bounds.size.h - top_used - sel_h) / 2;
 
   s_selection_layer = selection_layer_create(
@@ -125,7 +127,7 @@ static void goal_window_load(Window *window) {
 static void goal_window_unload(Window *window) {
   selection_layer_destroy(s_selection_layer);
   text_layer_destroy(s_prompt_layer);
-  layer_destroy(s_rule_layer);
+  layer_destroy(s_title_bg_layer);
   text_layer_destroy(s_title_layer);
   window_destroy(s_goal_window);
   s_goal_window = NULL;

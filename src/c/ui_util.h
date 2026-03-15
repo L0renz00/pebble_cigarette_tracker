@@ -6,3 +6,8 @@
 // divider beneath a window title — avoids copy-pasting the same 5 lines into
 // every window file.
 void ui_rule_update_proc(Layer *layer, GContext *ctx);
+
+// A Layer update_proc that fills its bounds with GColorBlack, creating an
+// inverted title bar.  Place behind a title TextLayer with GColorClear
+// background and accent-colored text.
+void ui_title_bar_update_proc(Layer *layer, GContext *ctx);
