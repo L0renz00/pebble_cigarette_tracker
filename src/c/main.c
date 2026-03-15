@@ -3,6 +3,7 @@
 #include "trend_window.h"
 #include "confirm_window.h"
 #include "settings_window.h"
+#include "animation_window.h"
 #include "main.h"
 
 static Window      *s_main_window;
@@ -99,6 +100,7 @@ static void on_confirm(bool confirmed) {
     if (res.updated_last_time) s_last_time = now;
     update_display();
     vibes_short_pulse();
+    animation_window_push();
   }
 }
 

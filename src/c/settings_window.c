@@ -5,7 +5,7 @@
 #include "goal_window.h"
 #include "main.h"
 
-#define SETTINGS_NUM_ROWS    5
+#define SETTINGS_NUM_ROWS    3
 #define SETTINGS_CELL_HEIGHT 44
 
 static Window    *s_settings_window;
@@ -30,14 +30,6 @@ static void on_delete_all_confirmed(bool confirmed) {
   }
 }
 
-static void on_seed_debug_confirmed(bool confirmed) {
-  if (confirmed) {
-    storage_seed_debug_data();
-    main_window_refresh();
-    window_stack_pop(true);
-  }
-}
-
 // --- MenuLayer callbacks -----------------------------------------------------
 
 static uint16_t get_num_rows_callback(MenuLayer *menu_layer,
@@ -54,15 +46,7 @@ static void draw_row_callback(GContext *ctx, const Layer *cell_layer,
     case 1:
       menu_cell_basic_draw(ctx, cell_layer, "Delete All Data", NULL, NULL);
       break;
-    case 2:
-      menu_cell_basic_draw(ctx, cell_layer, "Seed Debug Data",
-                           "Fill week + totals", NULL);
-      break;
-    case 3:
-      menu_cell_basic_draw(ctx, cell_layer, "Clear Debug Data",
-                           "Same as Delete All", NULL);
-      break;
-    case 4: {
+    case 2: {
       static char goal_sub[16];
       int32_t g = storage_get_goal();
       if (g > 0) snprintf(goal_sub, sizeof(goal_sub), "Current: %d", (int)g);
@@ -100,18 +84,6 @@ static void select_callback(struct MenuLayer *menu_layer,
         on_delete_all_confirmed);
       break;
     case 2:
-      dialog_choice_window_push(
-        "Overwrite with debug data?",
-        RESOURCE_ID_WARNING,
-        on_seed_debug_confirmed);
-      break;
-    case 3:
-      dialog_choice_window_push(
-        "Clear all debug data?",
-        RESOURCE_ID_WARNING,
-        on_delete_all_confirmed);
-      break;
-    case 4:
       goal_window_push((int)storage_get_goal());
       break;
     default:

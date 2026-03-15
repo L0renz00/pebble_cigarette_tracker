@@ -50,6 +50,11 @@
                     "name": "TICK",
                     "targetPlatforms": null,
                     "type": "bitmap"
+                },
+                {
+                    "file": "cigarette_smoke.pdc",
+                    "name": "CIGARETTE_SMOKE",
+                    "type": "raw"
                 }
             ]
         },
