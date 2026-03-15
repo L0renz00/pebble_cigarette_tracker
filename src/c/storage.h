@@ -33,3 +33,12 @@ time_t  storage_get_week_start(void);
 // Hour-of-day histogram — 24 buckets (0..23h), reset each week rollover.
 void storage_log_hour(int hour);
 void storage_get_hour_histogram(uint8_t *out_24);
+
+// Retroactive logging — insert a cigarette at an arbitrary past timestamp.
+// Returns flags so the caller can update its cached in-memory state.
+typedef struct {
+  bool is_today;           // true → caller must increment s_count
+  bool updated_last_time;  // true → caller must update s_last_time
+} RetroResult;
+
+RetroResult storage_log_retroactive(time_t retro_ts);

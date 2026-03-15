@@ -218,11 +218,35 @@ static void main_window_unload(Window *window) {
   text_layer_destroy(s_elapsed_layer);
 }
 
+// --- AppMessage (retroactive logging from phone config page) -----------------
+
+static void inbox_received_handler(DictionaryIterator *iter, void *context) {
+  Tuple *t = dict_find(iter, MESSAGE_KEY_RETROACTIVE_TIMESTAMP);
+  if (!t) return;
+
+  time_t retro_ts = (time_t)t->value->int32;
+  RetroResult res = storage_log_retroactive(retro_ts);
+
+  if (res.is_today) {
+    s_count++;
+  }
+  if (res.updated_last_time) {
+    s_last_time = retro_ts;
+  }
+  if (window_stack_get_top_window() == s_main_window) {
+    update_display();
+  }
+  vibes_short_pulse();
+}
+
 // --- App lifecycle -----------------------------------------------------------
 
 static void init(void) {
   storage_load(&s_count, &s_last_time);
   s_goal = storage_get_goal();
+
+  app_message_register_inbox_received(inbox_received_handler);
+  app_message_open(64, 32);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   accel_tap_service_subscribe(tap_handler);
@@ -239,6 +263,7 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  app_message_deregister_callbacks();
   tick_timer_service_unsubscribe();
   accel_tap_service_unsubscribe();
   window_destroy(s_main_window);

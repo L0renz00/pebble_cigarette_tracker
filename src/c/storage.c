@@ -362,3 +362,84 @@ void storage_seed_debug_data(void) {
 time_t storage_get_week_start(void) {
   return get_week_start(time(NULL));
 }
+
+// --- Retroactive logging -----------------------------------------------------
+
+RetroResult storage_log_retroactive(time_t retro_ts) {
+  RetroResult result = { .is_today = false, .updated_last_time = false };
+  time_t now = time(NULL);
+  if (retro_ts <= 0 || retro_ts > now) return result;
+
+  time_t today_start      = get_day_start(now);
+  time_t week_start       = get_week_start(now);
+  time_t retro_day_start  = get_day_start(retro_ts);
+  time_t retro_week_start = get_week_start(retro_ts);
+  bool is_today     = (retro_day_start == today_start);
+  bool is_this_week = (retro_week_start == week_start);
+
+  // Always increment all-time total.
+  int32_t total = persist_exists(KEY_TOTAL) ? persist_read_int(KEY_TOTAL) : 0;
+  persist_write_int(KEY_TOTAL, total + 1);
+
+  // Update KEY_LAST_TIME only if the retroactive timestamp is more recent.
+  time_t current_last = persist_exists(KEY_LAST_TIME)
+                        ? (time_t)persist_read_int(KEY_LAST_TIME) : 0;
+  if (retro_ts > current_last) {
+    persist_write_int(KEY_LAST_TIME, (int32_t)retro_ts);
+    result.updated_last_time = true;
+  }
+
+  if (is_this_week) {
+    DayEntry entries[HISTORY_DAYS];
+    load_history_raw(entries);
+
+    int day_index = (int)((retro_day_start - week_start) / 86400);
+    if (day_index < 0 || day_index >= HISTORY_DAYS) day_index = 0;
+
+    // If the app was never opened on this day, stamp the slot and count it.
+    if (entries[day_index].day_timestamp == 0) {
+      entries[day_index].day_timestamp = (int32_t)retro_day_start;
+      int32_t td = persist_exists(KEY_TOTAL_DAYS)
+                   ? persist_read_int(KEY_TOTAL_DAYS) : 0;
+      persist_write_int(KEY_TOTAL_DAYS, td + 1);
+    }
+    entries[day_index].count++;
+    persist_write_data(KEY_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
+
+    if (is_today) {
+      persist_write_int(KEY_COUNT, entries[day_index].count);
+      result.is_today = true;
+    }
+
+    // Update hourly histogram for current-week entries only.
+    // Copy struct tm — localtime() returns a static pointer (CLAUDE.md pitfall).
+    struct tm retro_tm_copy;
+    struct tm *tp = localtime(&retro_ts);
+    retro_tm_copy = *tp;
+    storage_log_hour(retro_tm_copy.tm_hour);
+
+  } else {
+    // Past week: update the archived WeekEntry total if it's still in history.
+    WeekEntry weeks[WEEK_HISTORY_COUNT];
+    memset(weeks, 0, sizeof(weeks));
+    int n = 0;
+    if (persist_exists(KEY_WEEK_HISTORY)) {
+      persist_read_data(KEY_WEEK_HISTORY, weeks,
+                        sizeof(WeekEntry) * WEEK_HISTORY_COUNT);
+      for (n = 0; n < WEEK_HISTORY_COUNT; n++) {
+        if (weeks[n].week_timestamp == 0) break;
+      }
+    }
+    for (int i = 0; i < n; i++) {
+      if (weeks[i].week_timestamp == (int32_t)retro_week_start) {
+        weeks[i].total++;
+        persist_write_data(KEY_WEEK_HISTORY, weeks,
+                           sizeof(WeekEntry) * WEEK_HISTORY_COUNT);
+        break;
+      }
+    }
+    // No histogram update for past weeks — that data is gone.
+  }
+
+  return result;
+}
