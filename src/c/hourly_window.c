@@ -95,16 +95,7 @@ static void hourly_window_load(Window *window) {
 
   int title_h = bounds.size.h / 7;
 
-  GFont title_font;
-  switch (preferred_content_size()) {
-    case PreferredContentSizeLarge:
-    case PreferredContentSizeExtraLarge:
-      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-      break;
-    default:
-      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-      break;
-  }
+  GFont title_font = ui_get_title_font();
 
   s_title_bg_layer = layer_create(GRect(0, 0, bounds.size.w, title_h));
   layer_set_update_proc(s_title_bg_layer, ui_title_bar_update_proc);

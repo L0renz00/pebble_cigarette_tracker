@@ -135,12 +135,10 @@ static void settings_window_unload(Window *window) {
 // --- Public API --------------------------------------------------------------
 
 void settings_window_push(void) {
-  if (!s_settings_window) {
-    s_settings_window = window_create();
-    window_set_window_handlers(s_settings_window, (WindowHandlers) {
-      .load   = settings_window_load,
-      .unload = settings_window_unload,
-    });
-  }
+  s_settings_window = window_create();
+  window_set_window_handlers(s_settings_window, (WindowHandlers) {
+    .load   = settings_window_load,
+    .unload = settings_window_unload,
+  });
   window_stack_push(s_settings_window, true);
 }

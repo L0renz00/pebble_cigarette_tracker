@@ -2,7 +2,6 @@
 #include "stats_window.h"
 #include "storage.h"
 #include "graph_layer.h"
-#include "history_window.h"
 #include "hourly_window.h"
 #include "ui_util.h"
 
@@ -35,24 +34,11 @@ static void stats_window_load(Window *window) {
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
   time_t week_start = storage_get_week_start();
-  time_t week_end   = week_start + 6 * 24 * 60 * 60;
-  char start_str[8], end_str[8];
-  strftime(start_str, sizeof(start_str), "%d.%m", localtime(&week_start));
-  strftime(end_str,   sizeof(end_str),   "%d.%m", localtime(&week_end));
-  snprintf(s_title_buf, sizeof(s_title_buf), "%s - %s", start_str, end_str);
+  ui_format_week_range(s_title_buf, sizeof(s_title_buf), week_start);
 
   int title_h = bounds.size.h / 7;
 
-  GFont title_font;
-  switch (preferred_content_size()) {
-    case PreferredContentSizeLarge:
-    case PreferredContentSizeExtraLarge:
-      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-      break;
-    default:
-      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-      break;
-  }
+  GFont title_font = ui_get_title_font();
 
   s_title_bg_layer = layer_create(GRect(0, 0, bounds.size.w, title_h));
   layer_set_update_proc(s_title_bg_layer, ui_title_bar_update_proc);

@@ -40,9 +40,9 @@ static void build_trend_chart_data(AreaChartData *cd,
 
   // Determine today's slot for the ring-dot and anchor label.
   time_t now = time(NULL);
-  struct tm *now_tm = localtime(&now);
-  now_tm->tm_hour = 0; now_tm->tm_min = 0; now_tm->tm_sec = 0;
-  time_t today_start = mktime(now_tm);
+  struct tm now_tm = *localtime(&now);
+  now_tm.tm_hour = 0; now_tm.tm_min = 0; now_tm.tm_sec = 0;
+  time_t today_start = mktime(&now_tm);
   int today_slot = (int)((today_start - week_start) / (24 * 60 * 60));
   if (today_slot >= 0 && today_slot < HISTORY_DAYS) cd->ring_idx = today_slot;
 
@@ -94,24 +94,11 @@ static void trend_window_load(Window *window) {
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
   time_t week_start = storage_get_week_start();
-  time_t week_end   = week_start + 6 * 24 * 60 * 60;
-  char start_str[8], end_str[8];
-  strftime(start_str, sizeof(start_str), "%d.%m", localtime(&week_start));
-  strftime(end_str,   sizeof(end_str),   "%d.%m", localtime(&week_end));
-  snprintf(s_title_buf, sizeof(s_title_buf), "%s - %s", start_str, end_str);
+  ui_format_week_range(s_title_buf, sizeof(s_title_buf), week_start);
 
   int title_h = bounds.size.h / 7;
 
-  GFont title_font;
-  switch (preferred_content_size()) {
-    case PreferredContentSizeLarge:
-    case PreferredContentSizeExtraLarge:
-      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-      break;
-    default:
-      title_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-      break;
-  }
+  GFont title_font = ui_get_title_font();
 
   s_title_bg_layer = layer_create(GRect(0, 0, bounds.size.w, title_h));
   layer_set_update_proc(s_title_bg_layer, ui_title_bar_update_proc);

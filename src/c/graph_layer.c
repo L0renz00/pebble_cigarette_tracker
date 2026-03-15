@@ -42,9 +42,9 @@ static void graph_layer_update_proc(Layer *layer, GContext *ctx) {
   }
 
   time_t now = time(NULL);
-  struct tm *now_tm = localtime(&now);
-  now_tm->tm_hour = 0; now_tm->tm_min = 0; now_tm->tm_sec = 0;
-  int32_t today_start = (int32_t)mktime(now_tm);
+  struct tm now_tm = *localtime(&now);
+  now_tm.tm_hour = 0; now_tm.tm_min = 0; now_tm.tm_sec = 0;
+  int32_t today_start = (int32_t)mktime(&now_tm);
 
   int row_h     = bounds.size.h / data->num_entries;
   int label_w   = bounds.size.w / 5;

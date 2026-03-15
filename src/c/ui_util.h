@@ -1,13 +1,14 @@
 #pragma once
 #include <pebble.h>
 
-// A Layer update_proc that draws a single 1px horizontal rule across the full
-// width of the layer. Assign this to any 1px-tall Layer used as a section
-// divider beneath a window title — avoids copy-pasting the same 5 lines into
-// every window file.
-void ui_rule_update_proc(Layer *layer, GContext *ctx);
-
 // A Layer update_proc that fills its bounds with GColorBlack, creating an
 // inverted title bar.  Place behind a title TextLayer with GColorClear
 // background and accent-colored text.
 void ui_title_bar_update_proc(Layer *layer, GContext *ctx);
+
+// Returns the appropriate title font for the current content size preference.
+GFont ui_get_title_font(void);
+
+// Formats a week date range ("DD.MM - DD.MM") into buf, derived from
+// week_start (the Monday midnight timestamp).
+void ui_format_week_range(char *buf, size_t buf_size, time_t week_start);

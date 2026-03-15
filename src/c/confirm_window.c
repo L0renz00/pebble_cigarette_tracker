@@ -76,14 +76,12 @@ void confirm_window_push(int current_count, ConfirmWindowCallback callback) {
   s_callback = callback;
   snprintf(s_label_buf, sizeof(s_label_buf), "Log a\ncigarette?\n(%d today)", current_count);
 
-  if (!s_confirm_window) {
-    s_confirm_window = window_create();
-    window_set_background_color(s_confirm_window,
-                    PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite));
-    window_set_window_handlers(s_confirm_window, (WindowHandlers) {
-      .load   = window_load,
-      .unload = window_unload,
-    });
-  }
+  s_confirm_window = window_create();
+  window_set_background_color(s_confirm_window,
+                  PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite));
+  window_set_window_handlers(s_confirm_window, (WindowHandlers) {
+    .load   = window_load,
+    .unload = window_unload,
+  });
   window_stack_push(s_confirm_window, true);
 }
