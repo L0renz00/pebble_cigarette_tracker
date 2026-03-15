@@ -189,7 +189,7 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_last_time_layer));
 
   s_clock_layer = text_layer_create(GRect(0, 2, bounds.size.w - 4, 18));
-  text_layer_set_text_alignment(s_clock_layer, GTextAlignmentRight);
+  text_layer_set_text_alignment(s_clock_layer, GTextAlignmentCenter);
   text_layer_set_font(s_clock_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_background_color(s_clock_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_clock_layer));
