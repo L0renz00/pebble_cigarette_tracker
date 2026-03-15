@@ -8,7 +8,14 @@
         "capabilities": ["configurable"],
         "enableMultiJS": true,
         "messageKeys": [
-            "RETROACTIVE_TIMESTAMP"
+            "RETROACTIVE_TIMESTAMP",
+            "EXPORT_REQUEST",
+            "EXPORT_TYPE",
+            "EXPORT_IDX",
+            "EXPORT_A",
+            "EXPORT_B",
+            "EXPORT_C",
+            "EXPORT_HOURS"
         ],
         "projectType": "native",
         "resources": {

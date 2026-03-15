@@ -16,7 +16,7 @@
 
 #define AREA_CHART_MAX_SLOTS  24   // max columns (hourly = 24, weekly = 7, history = 8)
 #define AREA_CHART_LABEL_LEN   8   // bottom label per slot, e.g. "Mo", "13.03", "6am"
-#define AREA_CHART_INFO_LEN   12   // info strip strings, e.g. "H: 9.3", "13/d"
+#define AREA_CHART_INFO_LEN   16   // info strip strings, e.g. "H: 9.3", "Peak: 22h-24h"
 
 typedef struct {
   // ---- slot geometry -------------------------------------------------------
@@ -33,11 +33,15 @@ typedef struct {
 
   // ---- visual --------------------------------------------------------------
   int    ring_idx;              // slot index for the ring-dot; -1 = none
+  char   ring_label[8];         // drawn above the ring-dot; "" = omit
   GColor fill_color;
   GColor anchor_color;          // color for anchor_label text
   bool   wide_bottom_labels;    // center each label at slot_cx with a 36px box
                                 // (use when slot_w is too narrow for the font)
   bool   hide_avg_line;         // suppress the dotted average line
+  bool   hide_dots;             // suppress all data-point dots (and ring-dot)
+  bool   larger_labels;         // use GOTHIC_18 labels and bigger ring-dot (hourly chart)
+  bool   show_y_axis;           // draw adaptive y-axis labels on the left
 
   // ---- empty state ---------------------------------------------------------
   const char *empty_message;   // displayed when n == 0; must be a static string

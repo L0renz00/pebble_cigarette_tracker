@@ -41,4 +41,4 @@ typedef struct {
   bool updated_last_time;  // true → caller must update s_last_time
 } RetroResult;
 
-RetroResult storage_log_retroactive(time_t retro_ts);
+RetroResult storage_log_at(time_t ts);

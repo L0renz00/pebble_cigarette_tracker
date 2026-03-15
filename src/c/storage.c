@@ -365,7 +365,7 @@ time_t storage_get_week_start(void) {
 
 // --- Retroactive logging -----------------------------------------------------
 
-RetroResult storage_log_retroactive(time_t retro_ts) {
+RetroResult storage_log_at(time_t retro_ts) {
   RetroResult result = { .is_today = false, .updated_last_time = false };
   time_t now = time(NULL);
   if (retro_ts <= 0 || retro_ts > now) return result;

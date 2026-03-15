@@ -7,49 +7,67 @@
 
 // --- Data preparation --------------------------------------------------------
 //
-// Maps the 24-bucket hour histogram into AreaChartData.  All 24 slots are
-// always populated so the fill forms a continuous shape from hour 0 to 23.
-// H/L labels are not used; the info strip shows "Peak" (left) and the peak
-// hour (right, in accent colour).
+// Buckets the 24-hour histogram into 12 × 2-hour windows, normalises to
+// percentages, applies symmetric weighted smoothing, and populates AreaChartData.
+
+#define HOURLY_BUCKETS 12
+#define HOURLY_BUCKET_SZ 2   // hours per bucket
 
 static void build_hourly_chart_data(AreaChartData *cd, uint8_t *hist) {
   memset(cd, 0, sizeof(AreaChartData));
 
-  int total = 0;
-  for (int h = 0; h < 24; h++) total += hist[h];
-
-  cd->total_slots        = 24;
+  cd->total_slots        = HOURLY_BUCKETS;
   cd->fill_color         = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
-  cd->anchor_color       = PBL_IF_COLOR_ELSE(GColorVividCerulean, GColorBlack);
   cd->empty_message      = "No data yet.\nLog your first\ncigarette!";
   cd->wide_bottom_labels = true;
   cd->hide_avg_line      = true;
+  cd->hide_dots          = true;
+  cd->show_y_axis        = false;
+  cd->larger_labels      = false;
   cd->ring_idx           = -1;
+
+  // Step 1: bucket 24h → 12 × 2h
+  int buckets[HOURLY_BUCKETS] = {0};
+  int total = 0;
+  for (int h = 0; h < 24; h++) {
+    buckets[h / HOURLY_BUCKET_SZ] += hist[h];
+    total += hist[h];
+  }
 
   if (total == 0) return;   // n == 0 triggers the empty message
 
-  int max_val = 0, peak_h = 0;
-  for (int h = 0; h < 24; h++) {
-    if (hist[h] > max_val) { max_val = hist[h]; peak_h = h; }
+  // Step 2: percentage normalise
+  int pct[HOURLY_BUCKETS];
+  for (int i = 0; i < HOURLY_BUCKETS; i++) {
+    pct[i] = buckets[i] * 100 / total;
   }
 
-  cd->n        = 24;
-  cd->ring_idx = peak_h;
-
-  for (int h = 0; h < 24; h++) {
-    cd->y[h]         = hist[h];
-    cd->populated[h] = true;
+  // Step 3: symmetric weighted smooth — (prev + 3·cur + next) / 5
+  cd->n = HOURLY_BUCKETS;
+  for (int i = 0; i < HOURLY_BUCKETS; i++) {
+    int prev = (i > 0)                  ? pct[i - 1] : pct[i];
+    int next = (i < HOURLY_BUCKETS - 1) ? pct[i + 1] : pct[i];
+    cd->y[i]         = (prev + 3 * pct[i] + next) / 5;
+    cd->populated[i] = true;
   }
 
-  // Info strip: "Peak" label on the left, peak hour in accent on the right.
-  snprintf(cd->h_label,      AREA_CHART_INFO_LEN, "Peak");
-  snprintf(cd->anchor_label, AREA_CHART_INFO_LEN, "%dh", peak_h);
+  // Step 4: peak window label (raw bucket, before smoothing)
+  int peak_b = 0;
+  for (int i = 1; i < HOURLY_BUCKETS; i++) {
+    if (pct[i] > pct[peak_b]) peak_b = i;
+  }
+  snprintf(cd->h_label, sizeof(cd->h_label), "Peak: %dh-%dh",
+           peak_b * HOURLY_BUCKET_SZ, (peak_b + 1) * HOURLY_BUCKET_SZ);
 
-  // X-axis: label only the three meaningful time boundaries.
-  snprintf(cd->bottom_labels[6],  AREA_CHART_LABEL_LEN, "6");
-  snprintf(cd->bottom_labels[12], AREA_CHART_LABEL_LEN, "12");
-  snprintf(cd->bottom_labels[18], AREA_CHART_LABEL_LEN, "18");
+  // Step 5: bottom labels — every 6h: slot 0=0h, slot 3=6h, slot 6=12h, slot 9=18h
+  snprintf(cd->bottom_labels[0], AREA_CHART_LABEL_LEN, "0");
+  snprintf(cd->bottom_labels[3], AREA_CHART_LABEL_LEN, "6");
+  snprintf(cd->bottom_labels[6], AREA_CHART_LABEL_LEN, "12");
+  snprintf(cd->bottom_labels[9], AREA_CHART_LABEL_LEN, "18");
 }
+
+#undef HOURLY_BUCKETS
+#undef HOURLY_BUCKET_SZ
 
 // --- Window ------------------------------------------------------------------
 
@@ -101,10 +119,9 @@ static void hourly_window_load(Window *window) {
   text_layer_set_background_color(s_title_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_title_layer));
 
-  int chart_y = title_h;
-  GRect chart_frame = GRect(4, chart_y,
+  GRect chart_frame = GRect(4, title_h,
                             bounds.size.w - 8,
-                            bounds.size.h - chart_y - 2);
+                            bounds.size.h - title_h - 2);
   s_chart_layer = area_chart_layer_create(chart_frame);
 
   uint8_t hist[24];

@@ -11,7 +11,7 @@ static GBitmap     *s_icon_bitmap;
 static TextLayer   *s_count_layer;
 static TextLayer   *s_goal_layer;
 static TextLayer   *s_last_time_layer;
-static TextLayer   *s_elapsed_layer;
+static TextLayer   *s_clock_layer;
 
 static int    s_count     = 0;
 static time_t s_last_time = 0;
@@ -20,22 +20,15 @@ static int32_t s_goal     = 0;
 static char s_count_buf[16];
 static char s_goal_buf[12];
 static char s_last_time_buf[40];
-static char s_elapsed_buf[16];
+static char s_clock_buf[8];
 
 // --- Display -----------------------------------------------------------------
 
-static void format_elapsed(char *buf, size_t size, time_t last_time) {
-  if (last_time == 0) { snprintf(buf, size, "--"); return; }
-  int total_minutes = (int)((time(NULL) - last_time) / 60);
-  if (total_minutes < 0) total_minutes = 0;
-
-  int days    = total_minutes / (24 * 60);
-  int hours   = (total_minutes % (24 * 60)) / 60;
-  int minutes = total_minutes % 60;
-
-  if (days > 0)        snprintf(buf, size, "%dd %dh", days, hours);
-  else if (hours > 0)  snprintf(buf, size, "%dh %dm", hours, minutes);
-  else                 snprintf(buf, size, "%dm", minutes);
+static void update_clock(void) {
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  strftime(s_clock_buf, sizeof(s_clock_buf), "%H:%M", t);
+  text_layer_set_text(s_clock_layer, s_clock_buf);
 }
 
 static void update_display(void) {
@@ -78,8 +71,6 @@ static void update_display(void) {
     text_layer_set_text(s_last_time_layer, s_last_time_buf);
   }
 
-  format_elapsed(s_elapsed_buf, sizeof(s_elapsed_buf), s_last_time);
-  text_layer_set_text(s_elapsed_layer, s_elapsed_buf);
 }
 
 void main_window_refresh(void) {
@@ -95,21 +86,17 @@ Window *main_window_get(void) {
 // --- Tick handler ------------------------------------------------------------
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
-  format_elapsed(s_elapsed_buf, sizeof(s_elapsed_buf), s_last_time);
-  text_layer_set_text(s_elapsed_layer, s_elapsed_buf);
+  update_clock();
 }
 
 // --- Confirm callback --------------------------------------------------------
 
 static void on_confirm(bool confirmed) {
   if (confirmed) {
-    s_count++;
-    s_last_time = time(NULL);
-    storage_save(s_count, s_last_time);
-    storage_increment_total();
-    // Record which hour this cigarette was logged for the hourly histogram.
-    struct tm *t = localtime(&s_last_time);
-    storage_log_hour(t->tm_hour);
+    time_t now = time(NULL);
+    RetroResult res = storage_log_at(now);
+    if (res.is_today)          s_count++;
+    if (res.updated_last_time) s_last_time = now;
     update_display();
     vibes_short_pulse();
   }
@@ -199,14 +186,14 @@ static void main_window_load(Window *window) {
   text_layer_set_background_color(s_last_time_layer, GColorClear);
   layer_add_child(window_layer, text_layer_get_layer(s_last_time_layer));
 
-  s_elapsed_layer = text_layer_create(
-      GRect(0, bounds.size.h * 3 / 4, bounds.size.w, slot_h));
-  text_layer_set_text_alignment(s_elapsed_layer, GTextAlignmentCenter);
-  text_layer_set_font(s_elapsed_layer, value_font);
-  text_layer_set_background_color(s_elapsed_layer, GColorClear);
-  layer_add_child(window_layer, text_layer_get_layer(s_elapsed_layer));
+  s_clock_layer = text_layer_create(GRect(0, 2, bounds.size.w - 4, 18));
+  text_layer_set_text_alignment(s_clock_layer, GTextAlignmentRight);
+  text_layer_set_font(s_clock_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_background_color(s_clock_layer, GColorClear);
+  layer_add_child(window_layer, text_layer_get_layer(s_clock_layer));
 
   update_display();
+  update_clock();
 }
 
 static void main_window_unload(Window *window) {
@@ -215,17 +202,77 @@ static void main_window_unload(Window *window) {
   text_layer_destroy(s_count_layer);
   text_layer_destroy(s_goal_layer);
   text_layer_destroy(s_last_time_layer);
-  text_layer_destroy(s_elapsed_layer);
+  text_layer_destroy(s_clock_layer);
 }
 
-// --- AppMessage (retroactive logging from phone config page) -----------------
+// --- AppMessage (retroactive logging + data export) --------------------------
+
+static int       s_export_step    = -1;
+static int       s_export_n_days  = 0;
+static int       s_export_n_weeks = 0;
+static DayEntry  s_export_days[HISTORY_DAYS];
+static WeekEntry s_export_weeks[WEEK_HISTORY_COUNT];
+
+static void export_send_step(void) {
+  if (s_export_step < 0) return;
+
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) != APP_MSG_OK) return;
+
+  int done_step = 2 + s_export_n_days + s_export_n_weeks;
+
+  if (s_export_step == 0) {
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_TYPE, 0);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_A, storage_get_total());
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_B, storage_get_total_days());
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_C, storage_get_goal());
+  } else if (s_export_step == 1) {
+    uint8_t hist[24];
+    storage_get_hour_histogram(hist);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_TYPE, 3);
+    dict_write_data(iter, MESSAGE_KEY_EXPORT_HOURS, hist, sizeof(hist));
+  } else if (s_export_step < 2 + s_export_n_days) {
+    int i = s_export_step - 2;
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_TYPE, 1);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_IDX, i);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_A, s_export_days[i].day_timestamp);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_B, s_export_days[i].count);
+  } else if (s_export_step < done_step) {
+    int i = s_export_step - 2 - s_export_n_days;
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_TYPE, 2);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_IDX, i);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_A, s_export_weeks[i].week_timestamp);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_B, s_export_weeks[i].total);
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_C, s_export_weeks[i].days_active);
+  } else {
+    dict_write_int32(iter, MESSAGE_KEY_EXPORT_TYPE, 4);
+    s_export_step = -1;
+  }
+
+  app_message_outbox_send();
+}
+
+static void outbox_sent_handler(DictionaryIterator *iter, void *context) {
+  if (s_export_step < 0) return;
+  s_export_step++;
+  export_send_step();
+}
 
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
+  Tuple *req = dict_find(iter, MESSAGE_KEY_EXPORT_REQUEST);
+  if (req) {
+    storage_get_history(s_export_days, &s_export_n_days);
+    storage_get_week_history(s_export_weeks, &s_export_n_weeks);
+    s_export_step = 0;
+    export_send_step();
+    return;
+  }
+
   Tuple *t = dict_find(iter, MESSAGE_KEY_RETROACTIVE_TIMESTAMP);
   if (!t) return;
 
   time_t retro_ts = (time_t)t->value->int32;
-  RetroResult res = storage_log_retroactive(retro_ts);
+  RetroResult res = storage_log_at(retro_ts);
 
   if (res.is_today) {
     s_count++;
@@ -246,7 +293,8 @@ static void init(void) {
   s_goal = storage_get_goal();
 
   app_message_register_inbox_received(inbox_received_handler);
-  app_message_open(64, 32);
+  app_message_register_outbox_sent(outbox_sent_handler);
+  app_message_open(128, 128);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   accel_tap_service_subscribe(tap_handler);
