@@ -6,8 +6,8 @@
 #include "main.h"
 
 // Only the most recent N completed weeks are shown — more than that and the
-// per-slot date labels become unreadably narrow on Basalt (144px / 5 = 28px).
-#define HISTORY_DISPLAY_WEEKS  5
+// per-slot date labels become unreadably narrow on Basalt (144px / 6 = 24px).
+#define HISTORY_DISPLAY_WEEKS  6
 
 static Window         *s_history_window;
 static TextLayer      *s_title_layer;
@@ -32,50 +32,36 @@ static void build_history_chart_data(AreaChartData *cd,
 
   cd->total_slots        = num_entries;
   cd->n                  = num_entries;
-  cd->ring_idx           = (num_entries > 0) ? num_entries - 1 : -1;
+  cd->ring_idx           = -1;
   cd->fill_color         = PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack);
   cd->wide_bottom_labels = false;
-  cd->hide_avg_line      = false;
-  cd->anchor_color  = PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack);
-  cd->empty_message = "No history yet.\nCome back next\nweek!";
-
-  int max_val = 0, min_val = INT32_MAX;
-  int max_idx = -1, min_idx = -1;
+  cd->hide_avg_line      = true;
+  cd->show_y_axis        = true;
+  cd->y_axis_tenths      = true;
+  cd->empty_message      = "No history yet.\nCome back next\nweek!";
 
   for (int i = 0; i < num_entries; i++) {
     int32_t da = entries[i].days_active;
-    int v = (da > 0) ? (int)((entries[i].total * 10) / da) : 0;
-    cd->y[i]         = v;
+    cd->y[i]         = (da > 0) ? (int)((entries[i].total * 10) / da) : 0;
     cd->populated[i] = true;
 
-    // Bottom label: week-start date, e.g. "10.03".
+    // Bottom label: Monday date of that week, day-of-month only, e.g. "10".
     time_t ws = (time_t)entries[i].week_timestamp;
-    strftime(cd->bottom_labels[i], AREA_CHART_LABEL_LEN, "%d.%m",
+    strftime(cd->bottom_labels[i], AREA_CHART_LABEL_LEN, "%d",
              localtime(&ws));
-
-    if (max_idx < 0 || v > max_val) { max_val = v; max_idx = i; }
-    if (min_idx < 0 || v < min_val) { min_val = v; min_idx = i; }
   }
 
-  // Info strip labels — L omitted when there's only one distinct value.
-  // Whole parts are clamped to 3 digits and fractional parts cast to unsigned
-  // so the compiler can verify the snprintf output fits in AREA_CHART_INFO_LEN.
-  bool single = (num_entries <= 1) || (max_idx == min_idx);
-  if (max_idx >= 0) {
-    int w = max_val / 10; if (w > 999) w = 999;
+  // Trend delta: newest avg minus oldest avg, shown as "▲ +1.2/d" / "▼ -0.8/d".
+  // The arrow glyph is drawn as a filled GPath triangle (h_label_arrow); the
+  // label text carries only the sign and magnitude.
+  if (num_entries >= 2) {
+    int delta = cd->y[num_entries - 1] - cd->y[0];
+    int abs_d = delta < 0 ? -delta : delta;
+    cd->h_label_arrow = (delta > 0) ? 1 : (delta < 0) ? -1 : 0;
     snprintf(cd->h_label, AREA_CHART_INFO_LEN,
-             "H: %d.%u", w, (unsigned)(max_val % 10));
-  }
-  if (!single && min_idx >= 0) {
-    int w = min_val / 10; if (w > 999) w = 999;
-    snprintf(cd->l_label, AREA_CHART_INFO_LEN,
-             "L: %d.%u", w, (unsigned)(min_val % 10));
-  }
-  if (cd->ring_idx >= 0) {
-    int av = cd->y[cd->ring_idx];
-    int w = av / 10; if (w > 999) w = 999;
-    snprintf(cd->anchor_label, AREA_CHART_INFO_LEN,
-             "%d.%u/d", w, (unsigned)(av % 10));
+             "%c%d.%d/d",
+             delta >= 0 ? '+' : '-',
+             abs_d / 10, abs_d % 10);
   }
 }
 

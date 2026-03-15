@@ -28,6 +28,7 @@ typedef struct {
   // ---- labels (pre-formatted by the window) --------------------------------
   char  bottom_labels[AREA_CHART_MAX_SLOTS][AREA_CHART_LABEL_LEN];
   char  h_label[AREA_CHART_INFO_LEN];       // top-left,    "" = omit
+  int8_t h_label_arrow;                     // 1=up ▲, -1=down ▼, 0=none
   char  l_label[AREA_CHART_INFO_LEN];       // top-centre,  "" = omit
   char  anchor_label[AREA_CHART_INFO_LEN];  // top-right,   e.g. "13" or "9.3/d"
 
@@ -43,6 +44,7 @@ typedef struct {
   bool   hide_dots;             // suppress all data-point dots (and ring-dot)
   bool   larger_labels;         // use GOTHIC_18 labels and bigger ring-dot (hourly chart)
   bool   show_y_axis;           // draw adaptive y-axis labels on the left
+  bool   y_axis_tenths;         // y values are stored as tenths; format labels as "X.Y"
 
   // ---- empty state ---------------------------------------------------------
   const char *empty_message;   // displayed when n == 0; must be a static string

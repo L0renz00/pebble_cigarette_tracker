@@ -180,6 +180,7 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
   // ---- 5. Info strip (above the plot) --------------------------------------
   //
   //  Left    h_label      "H: 17" or "H: 9.3"    GOTHIC_14_BOLD, black
+  //            optionally preceded by a small filled triangle (h_label_arrow)
   //  Centre  l_label      "L: 4"  or "L: 5.1"    GOTHIC_14_BOLD, black (omitted if empty)
   //  Right   anchor_label "13"    or "9.3/d"      GOTHIC_18_BOLD, anchor_color
 
@@ -189,9 +190,35 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
     // so longer strings (e.g. "Peak: 22h") are not truncated.
     int h_label_w = d->chart.l_label[0] ? stat_w : stat_w * 2;
     graphics_context_set_text_color(ctx, GColorBlack);
+
+    // Arrow triangle drawn with GPath — avoids any font glyph dependency.
+    int arrow_x_offset = 0;
+    if (d->chart.h_label_arrow != 0) {
+      int tw = info_h / 3;          // triangle width  (~6 px small, ~8 px large)
+      int th = tw + 1;              // triangle height
+      int tx = 1;
+      int ty_mid = info_h / 2;
+      GPoint tri_pts[3];
+      if (d->chart.h_label_arrow > 0) {   // up ▲
+        tri_pts[0] = GPoint(tx + tw / 2, ty_mid - th / 2);
+        tri_pts[1] = GPoint(tx,           ty_mid + th / 2);
+        tri_pts[2] = GPoint(tx + tw,      ty_mid + th / 2);
+      } else {                            // down ▼
+        tri_pts[0] = GPoint(tx,           ty_mid - th / 2);
+        tri_pts[1] = GPoint(tx + tw,      ty_mid - th / 2);
+        tri_pts[2] = GPoint(tx + tw / 2,  ty_mid + th / 2);
+      }
+      GPathInfo tri_info = { .num_points = 3, .points = tri_pts };
+      GPath *tri = gpath_create(&tri_info);
+      graphics_context_set_fill_color(ctx, GColorBlack);
+      gpath_draw_filled(ctx, tri);
+      gpath_destroy(tri);
+      arrow_x_offset = tw + 3;
+    }
+
     if (d->chart.h_label[0]) {
       graphics_draw_text(ctx, d->chart.h_label, info_font,
-                         GRect(0, 0, h_label_w, info_h),
+                         GRect(arrow_x_offset, 0, h_label_w - arrow_x_offset, info_h),
                          GTextOverflowModeTrailingEllipsis,
                          GTextAlignmentLeft, NULL);
     }
@@ -260,7 +287,11 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
       int ty = Y_FULL(tick);
       if (ty < plot_top || ty > plot_bottom) continue;
       char buf[6];
-      snprintf(buf, sizeof(buf), "%d", tick);
+      // y_axis_tenths: values are stored *10; show whole units to fit the margin.
+      if (d->chart.y_axis_tenths)
+        snprintf(buf, sizeof(buf), "%d", tick / 10);
+      else
+        snprintf(buf, sizeof(buf), "%d", tick);
       graphics_draw_text(ctx, buf, y_font,
                          GRect(0, ty - 7, left_margin - 1, 14),
                          GTextOverflowModeTrailingEllipsis,
