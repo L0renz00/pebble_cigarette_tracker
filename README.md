@@ -1,4 +1,4 @@
-# Zigarettentracker
+# Cigarette Tracker
 
 A Pebble smartwatch app for tracking cigarettes. Log with a button press or wrist shake, see today's count and last-smoke time, and browse daily, hourly, and weekly charts.
 
