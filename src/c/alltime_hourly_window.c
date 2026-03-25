@@ -1,5 +1,4 @@
 #include <pebble.h>
-#include "hourly_window.h"
 #include "alltime_hourly_window.h"
 #include "alltime_window.h"
 #include "storage.h"
@@ -8,17 +7,17 @@
 
 // --- Data preparation --------------------------------------------------------
 //
-// Buckets the 24-hour histogram into 12 × 2-hour windows, normalises to
-// percentages, applies symmetric weighted smoothing, and populates AreaChartData.
+// Same 12 × 2-hour bucketing and smoothing as hourly_window, but reads the
+// all-time histogram (uint16_t[24]) instead of the weekly one.
 
 #define HOURLY_BUCKETS 12
 #define HOURLY_BUCKET_SZ 2   // hours per bucket
 
-static void build_hourly_chart_data(AreaChartData *cd, uint8_t *hist) {
+static void build_alltime_hourly_chart_data(AreaChartData *cd, uint16_t *hist) {
   memset(cd, 0, sizeof(AreaChartData));
 
   cd->total_slots        = HOURLY_BUCKETS;
-  cd->fill_color         = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
+  cd->fill_color         = PBL_IF_COLOR_ELSE(GColorMelon, GColorBlack);
   cd->empty_message      = "No data yet.\nLog your first\ncigarette!";
   cd->wide_bottom_labels = true;
   cd->hide_avg_line      = true;
@@ -60,7 +59,7 @@ static void build_hourly_chart_data(AreaChartData *cd, uint8_t *hist) {
   snprintf(cd->h_label, sizeof(cd->h_label), "Peak: %dh-%dh",
            peak_b * HOURLY_BUCKET_SZ, (peak_b + 1) * HOURLY_BUCKET_SZ);
 
-  // Step 5: bottom labels — every 6h: slot 0=0h, slot 3=6h, slot 6=12h, slot 9=18h
+  // Step 5: bottom labels — every 6h
   snprintf(cd->bottom_labels[0], AREA_CHART_LABEL_LEN, "0");
   snprintf(cd->bottom_labels[3], AREA_CHART_LABEL_LEN, "6");
   snprintf(cd->bottom_labels[6], AREA_CHART_LABEL_LEN, "12");
@@ -72,14 +71,10 @@ static void build_hourly_chart_data(AreaChartData *cd, uint8_t *hist) {
 
 // --- Window ------------------------------------------------------------------
 
-static Window         *s_hourly_window;
+static Window         *s_window;
 static TextLayer      *s_title_layer;
 static Layer          *s_title_bg_layer;
 static AreaChartLayer *s_chart_layer;
-
-static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  alltime_hourly_window_push();
-}
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   alltime_window_push();
@@ -90,12 +85,11 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_UP,     up_click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN,   down_click_handler);
 }
 
-static void hourly_window_load(Window *window) {
+static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
@@ -108,7 +102,7 @@ static void hourly_window_load(Window *window) {
   layer_add_child(window_layer, s_title_bg_layer);
 
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, title_h));
-  text_layer_set_text(s_title_layer, "Week By Hour");
+  text_layer_set_text(s_title_layer, "All-Time Hours");
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   text_layer_set_font(s_title_layer, title_font);
   text_layer_set_text_color(s_title_layer,
@@ -121,33 +115,33 @@ static void hourly_window_load(Window *window) {
                             bounds.size.h - title_h - 2);
   s_chart_layer = area_chart_layer_create(chart_frame);
 
-  uint8_t hist[24];
-  storage_get_hour_histogram(hist);
+  uint16_t hist[24];
+  storage_get_alltime_hour_histogram(hist);
 
   AreaChartData cd;
-  build_hourly_chart_data(&cd, hist);
+  build_alltime_hourly_chart_data(&cd, hist);
   area_chart_layer_set_data(s_chart_layer, &cd);
 
   layer_add_child(window_layer, s_chart_layer);
   area_chart_layer_animate_in(s_chart_layer);
 }
 
-static void hourly_window_unload(Window *window) {
+static void window_unload(Window *window) {
   text_layer_destroy(s_title_layer);
   layer_destroy(s_title_bg_layer);
   area_chart_layer_destroy(s_chart_layer);
-  window_destroy(s_hourly_window);
-  s_hourly_window = NULL;
+  window_destroy(s_window);
+  s_window = NULL;
 }
 
-void hourly_window_push(void) {
-  s_hourly_window = window_create();
-  window_set_background_color(s_hourly_window,
+void alltime_hourly_window_push(void) {
+  s_window = window_create();
+  window_set_background_color(s_window,
                               PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorWhite));
-  window_set_click_config_provider(s_hourly_window, click_config_provider);
-  window_set_window_handlers(s_hourly_window, (WindowHandlers) {
-    .load   = hourly_window_load,
-    .unload = hourly_window_unload,
+  window_set_click_config_provider(s_window, click_config_provider);
+  window_set_window_handlers(s_window, (WindowHandlers) {
+    .load   = window_load,
+    .unload = window_unload,
   });
-  window_stack_push(s_hourly_window, true);
+  window_stack_push(s_window, true);
 }

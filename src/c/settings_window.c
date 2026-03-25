@@ -5,7 +5,7 @@
 #include "goal_window.h"
 #include "main.h"
 
-#define SETTINGS_NUM_ROWS    3
+#define SETTINGS_NUM_ROWS    4
 #define SETTINGS_CELL_HEIGHT 44
 
 static Window    *s_settings_window;
@@ -54,6 +54,9 @@ static void draw_row_callback(GContext *ctx, const Layer *cell_layer,
       menu_cell_basic_draw(ctx, cell_layer, "Daily Goal", goal_sub, NULL);
       break;
     }
+    case 3:
+      menu_cell_basic_draw(ctx, cell_layer, "Load Debug Data", NULL, NULL);
+      break;
     default:
       break;
   }
@@ -85,6 +88,11 @@ static void select_callback(struct MenuLayer *menu_layer,
       break;
     case 2:
       goal_window_push((int)storage_get_goal());
+      break;
+    case 3:
+      storage_seed_debug_data();
+      main_window_refresh();
+      window_stack_pop(true);
       break;
     default:
       break;

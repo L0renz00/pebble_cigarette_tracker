@@ -10,6 +10,7 @@
 #define KEY_WEEK_HISTORY     6   // WeekEntry[WEEK_HISTORY_COUNT]
 #define KEY_HOUR_HISTOGRAM   7   // uint8_t[24] — cigarettes per hour, this week
 #define KEY_DAILY_GOAL       8   // int32 — user's daily cigarette limit; 0 = disabled
+#define KEY_ALLTIME_HOUR_HISTOGRAM 9  // uint16_t[24] — all-time cigarettes per hour
 
 // --- Internal helpers --------------------------------------------------------
 
@@ -138,11 +139,24 @@ static void check_version(void) {
     persist_delete(KEY_TOTAL_DAYS);
     persist_delete(KEY_WEEK_HISTORY);
     persist_delete(KEY_HOUR_HISTOGRAM);
+    persist_delete(KEY_ALLTIME_HOUR_HISTOGRAM);
     // KEY_DAILY_GOAL absent → storage_get_goal() returns 0 (disabled)
   }
 
   // v2 → v3: the only addition is KEY_DAILY_GOAL.  All existing keys are
   // untouched.  storage_get_goal() handles the absent key gracefully.
+
+  // v3 → v4: seed all-time hourly histogram from current week's data.
+  // Historical hourly data from before this update is lost (never stored).
+  if (stored >= 2 && stored < 4) {
+    if (persist_exists(KEY_HOUR_HISTOGRAM)) {
+      uint8_t hist8[24];
+      persist_read_data(KEY_HOUR_HISTOGRAM, hist8, sizeof(hist8));
+      uint16_t hist16[24];
+      for (int i = 0; i < 24; i++) hist16[i] = hist8[i];
+      persist_write_data(KEY_ALLTIME_HOUR_HISTOGRAM, hist16, sizeof(hist16));
+    }
+  }
 
   persist_write_int(KEY_STORAGE_VERSION, STORAGE_VERSION);
 }
@@ -250,6 +264,7 @@ void storage_delete_all(void) {
   persist_delete(KEY_TOTAL_DAYS);
   persist_delete(KEY_WEEK_HISTORY);
   persist_delete(KEY_HOUR_HISTOGRAM);
+  persist_delete(KEY_ALLTIME_HOUR_HISTOGRAM);
   // Intentionally keep KEY_STORAGE_VERSION and KEY_DAILY_GOAL — the user's
   // goal setting should survive a data wipe.
 }
@@ -258,6 +273,8 @@ void storage_delete_all(void) {
 
 void storage_log_hour(int hour) {
   if (hour < 0 || hour > 23) return;
+
+  // Weekly histogram (uint8, reset each Monday)
   uint8_t hist[24];
   if (persist_exists(KEY_HOUR_HISTOGRAM)) {
     persist_read_data(KEY_HOUR_HISTOGRAM, hist, sizeof(hist));
@@ -266,6 +283,16 @@ void storage_log_hour(int hour) {
   }
   if (hist[hour] < 255) hist[hour]++;
   persist_write_data(KEY_HOUR_HISTOGRAM, hist, sizeof(hist));
+
+  // All-time histogram (uint16, never reset by rollover)
+  uint16_t alltime[24];
+  if (persist_exists(KEY_ALLTIME_HOUR_HISTOGRAM)) {
+    persist_read_data(KEY_ALLTIME_HOUR_HISTOGRAM, alltime, sizeof(alltime));
+  } else {
+    memset(alltime, 0, sizeof(alltime));
+  }
+  if (alltime[hour] < UINT16_MAX) alltime[hour]++;
+  persist_write_data(KEY_ALLTIME_HOUR_HISTOGRAM, alltime, sizeof(alltime));
 }
 
 void storage_get_hour_histogram(uint8_t *out_24) {
@@ -273,6 +300,14 @@ void storage_get_hour_histogram(uint8_t *out_24) {
     persist_read_data(KEY_HOUR_HISTOGRAM, out_24, 24);
   } else {
     memset(out_24, 0, 24);
+  }
+}
+
+void storage_get_alltime_hour_histogram(uint16_t *out_24) {
+  if (persist_exists(KEY_ALLTIME_HOUR_HISTOGRAM)) {
+    persist_read_data(KEY_ALLTIME_HOUR_HISTOGRAM, out_24, sizeof(uint16_t) * 24);
+  } else {
+    memset(out_24, 0, sizeof(uint16_t) * 24);
   }
 }
 
@@ -357,6 +392,12 @@ void storage_seed_debug_data(void) {
     5, 4, 3, 1,         // 20–23h  evening taper
   };
   persist_write_data(KEY_HOUR_HISTOGRAM, fake_hist, sizeof(fake_hist));
+
+  // All-time histogram — simulate ~8 weeks of the same pattern.
+  uint16_t fake_alltime[24];
+  for (int i = 0; i < 24; i++) fake_alltime[i] = (uint16_t)(fake_hist[i] * 8);
+  persist_write_data(KEY_ALLTIME_HOUR_HISTOGRAM, fake_alltime,
+                     sizeof(fake_alltime));
 }
 
 time_t storage_get_week_start(void) {
@@ -438,7 +479,22 @@ RetroResult storage_log_at(time_t retro_ts) {
         break;
       }
     }
-    // No histogram update for past weeks — that data is gone.
+    // Weekly histogram not updated for past weeks — that data is gone.
+    // But still update the all-time histogram.
+    struct tm retro_tm_copy;
+    struct tm *tp = localtime(&retro_ts);
+    retro_tm_copy = *tp;
+    int retro_hour = retro_tm_copy.tm_hour;
+    if (retro_hour >= 0 && retro_hour <= 23) {
+      uint16_t alltime[24];
+      if (persist_exists(KEY_ALLTIME_HOUR_HISTOGRAM)) {
+        persist_read_data(KEY_ALLTIME_HOUR_HISTOGRAM, alltime, sizeof(alltime));
+      } else {
+        memset(alltime, 0, sizeof(alltime));
+      }
+      if (alltime[retro_hour] < UINT16_MAX) alltime[retro_hour]++;
+      persist_write_data(KEY_ALLTIME_HOUR_HISTOGRAM, alltime, sizeof(alltime));
+    }
   }
 
   return result;

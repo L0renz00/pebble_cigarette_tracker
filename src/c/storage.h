@@ -3,7 +3,7 @@
 
 #define HISTORY_DAYS       7
 #define WEEK_HISTORY_COUNT 8    // weeks of rolling history kept
-#define STORAGE_VERSION    3
+#define STORAGE_VERSION    4
 
 typedef struct {
   int32_t day_timestamp;
@@ -33,6 +33,9 @@ time_t  storage_get_week_start(void);
 // Hour-of-day histogram — 24 buckets (0..23h), reset each week rollover.
 void storage_log_hour(int hour);
 void storage_get_hour_histogram(uint8_t *out_24);
+
+// All-time hour-of-day histogram — 24 × uint16_t, never reset by rollover.
+void storage_get_alltime_hour_histogram(uint16_t *out_24);
 
 // Retroactive logging — insert a cigarette at an arbitrary past timestamp.
 // Returns flags so the caller can update its cached in-memory state.
