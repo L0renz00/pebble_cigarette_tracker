@@ -1,8 +1,8 @@
 # Cigarette Tracker
 
-A Pebble smartwatch app for tracking cigarettes. Log with a button press or wrist shake, see today's count and last-smoke time, and browse daily, hourly, and weekly charts.
+A Pebble smartwatch app for tracking cigarettes. Log with a button press, see today's count and last-smoke time, and browse daily, hourly, and weekly charts.
 
-Built with Pebble SDK 4.9. Primary targets: **Basalt** (144×168) and **Emery** (200×228), with support for all Pebble platforms.
+Built with Pebble SDK 3. Primary targets: **Basalt** (144×168) and **Emery** (200×228), with support for all Pebble platforms.
 Get it on the [Pebble App Store](https://apps.repebble.com/25ae7bcfc43540f6b8461f20)
 
 ## Features
@@ -21,11 +21,11 @@ Get it on the [Pebble App Store](https://apps.repebble.com/25ae7bcfc43540f6b8461
 ## Navigation
 
 ```
-Home ──UP──► Week (bar) ──UP──► Week (area) ──UP──► Weekly Averages
-│                                    │
-│                                    SELECT──► By Hour ──SELECT──► All-Time
+Home ──UP──► Week (area) ──UP──► Week (bar) ──SELECT──► By Hour ──SELECT──► All-Time
+│                 │                                                            │
+│                 SELECT──► By Hour                                        UP──► Weekly Avg
 │
-SELECT/shake──► Confirm (UP=yes, DOWN=cancel)
+SELECT──► Confirm (UP=yes, DOWN=cancel)
 DOWN──► Settings
 ```
 
@@ -46,6 +46,7 @@ src/
 │   ├── main.c/.h              Home screen
 │   ├── storage.c/.h           Persistent data (only file using persist_*)
 │   ├── confirm_window.c/.h    Log confirmation dialog
+│   ├── animation_window.c/.h  Smoke animation (PDC sequence)
 │   ├── settings_window.c/.h   Settings menu
 │   ├── stats_window.c/.h      Weekly bar chart
 │   ├── trend_window.c/.h      Weekly area chart
@@ -55,7 +56,7 @@ src/
 │   ├── goal_window.c/.h       Daily goal picker
 │   ├── dialog_choice_window.c/.h  Generic yes/no dialog
 │   ├── area_chart_layer.c/.h  Reusable area chart component
-│   ├── graph_layer.c/.h       Horizontal bar chart component
+│   ├── graph_layer.c/.h       Animated bar chart component
 │   ├── selection_layer.c/.h   Digit selector component
 │   └── ui_util.c/.h           Shared UI helpers
 ├── pkjs/
