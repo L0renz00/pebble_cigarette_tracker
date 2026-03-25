@@ -104,15 +104,6 @@ static void on_confirm(bool confirmed) {
   }
 }
 
-// --- Tap handler (shake to log) ----------------------------------------------
-
-static void tap_handler(AccelAxisType axis, int32_t direction) {
-  // Only fire when the main window is on top — ignore shakes while the user
-  // is browsing stats, settings, or confirmation dialogs.
-  if (window_stack_get_top_window() != s_main_window) return;
-  confirm_window_push(s_count, on_confirm);
-}
-
 // --- Click handlers ----------------------------------------------------------
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -299,7 +290,6 @@ static void init(void) {
   app_message_open(128, 128);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
-  accel_tap_service_subscribe(tap_handler);
 
   s_main_window = window_create();
   window_set_background_color(s_main_window,
@@ -315,7 +305,6 @@ static void init(void) {
 static void deinit(void) {
   app_message_deregister_callbacks();
   tick_timer_service_unsubscribe();
-  accel_tap_service_unsubscribe();
   window_destroy(s_main_window);
 }
 
