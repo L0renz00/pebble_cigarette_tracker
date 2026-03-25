@@ -7,7 +7,7 @@ Get it on the [Pebble App Store](https://apps.repebble.com/25ae7bcfc43540f6b8461
 
 ## Features
 
-- **Quick logging** — press SELECT or shake your wrist to log a cigarette
+- **Quick logging** — press SELECT
 - **Daily goal** — set a target (0–60); color-coded warnings as you approach it
 - **Retroactive logging** — log missed cigarettes at past times via the config page
 - **Charts & stats**
