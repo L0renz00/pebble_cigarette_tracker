@@ -67,6 +67,42 @@ static void build_trend_chart_data(AreaChartData *cd,
   }
 }
 
+// Rolling-mode variant: entries are already in chronological order (today-6..today).
+static void build_rolling_chart_data(AreaChartData *cd, DayEntry *entries7) {
+  memset(cd, 0, sizeof(AreaChartData));
+  cd->total_slots        = HISTORY_DAYS;
+  cd->ring_idx           = 6;  // today is always the last slot
+  cd->fill_color         = PBL_IF_COLOR_ELSE(GColorBlueMoon, GColorBlack);
+  cd->empty_message      = "No data yet.";
+  cd->wide_bottom_labels = false;
+  cd->hide_avg_line      = true;
+  cd->show_y_axis        = true;
+
+  int total = 0;
+  for (int i = 0; i < HISTORY_DAYS; i++) {
+    // Generate 2-char day label from timestamp.
+    time_t ts = (time_t)entries7[i].day_timestamp;
+    struct tm tm_copy = *localtime(&ts);
+    strftime(cd->bottom_labels[i], AREA_CHART_LABEL_LEN, "%a", &tm_copy);
+    // Truncate to 2 chars (e.g. "Mon" → "Mo").
+    cd->bottom_labels[i][2] = '\0';
+
+    int v = (int)entries7[i].count;
+    cd->y[i] = v;
+    if (v > 0 || entries7[i].day_timestamp != 0) {
+      cd->populated[i] = true;
+      cd->n++;
+      total += v;
+    }
+  }
+
+  if (cd->n > 0) {
+    int avg_int  = total / cd->n;
+    int avg_frac = (total * 10 / cd->n) % 10;
+    snprintf(cd->h_label, AREA_CHART_INFO_LEN, "Avg: %d.%d/d", avg_int, avg_frac);
+  }
+}
+
 // --- Click handlers ----------------------------------------------------------
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -93,7 +129,17 @@ static void trend_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
-  time_t week_start = storage_get_week_start();
+  bool rolling = storage_get_rolling_mode();
+  time_t week_start;
+  if (rolling) {
+    // Title shows the rolling 7-day range (today-6 .. today).
+    time_t now = time(NULL);
+    struct tm tmp = *localtime(&now);
+    tmp.tm_hour = 0; tmp.tm_min = 0; tmp.tm_sec = 0;
+    week_start = mktime(&tmp) - (time_t)(6 * 24 * 60 * 60);
+  } else {
+    week_start = storage_get_week_start();
+  }
   ui_format_week_range(s_title_buf, sizeof(s_title_buf), week_start);
 
   int title_h = bounds.size.h / 7;
@@ -119,12 +165,17 @@ static void trend_window_load(Window *window) {
                             bounds.size.h - chart_y - 2);
   s_chart_layer = area_chart_layer_create(chart_frame);
 
-  DayEntry entries[HISTORY_DAYS];
-  int num_entries;
-  storage_get_history(entries, &num_entries);
-
   AreaChartData cd;
-  build_trend_chart_data(&cd, entries, num_entries, week_start);
+  if (rolling) {
+    DayEntry entries7[HISTORY_DAYS];
+    storage_get_rolling_history(entries7);
+    build_rolling_chart_data(&cd, entries7);
+  } else {
+    DayEntry entries[HISTORY_DAYS];
+    int num_entries;
+    storage_get_history(entries, &num_entries);
+    build_trend_chart_data(&cd, entries, num_entries, week_start);
+  }
   cd.goal = (int)storage_get_goal();
   area_chart_layer_set_data(s_chart_layer, &cd);
 

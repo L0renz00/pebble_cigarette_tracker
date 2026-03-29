@@ -11,6 +11,8 @@
 #define KEY_HOUR_HISTOGRAM   7   // uint8_t[24] — cigarettes per hour, this week
 #define KEY_DAILY_GOAL       8   // int32 — user's daily cigarette limit; 0 = disabled
 #define KEY_ALLTIME_HOUR_HISTOGRAM 9  // uint16_t[24] — all-time cigarettes per hour
+#define KEY_PREV_HISTORY         10  // DayEntry[7] — previous week's daily slots
+#define KEY_ROLLING_MODE         11  // int32 — 0=Mon–Sun (default), 1=rolling 7 days
 
 // --- Internal helpers --------------------------------------------------------
 
@@ -32,6 +34,14 @@ static time_t get_week_start(time_t t) {
 static void load_history_raw(DayEntry *entries) {
   if (persist_exists(KEY_HISTORY)) {
     persist_read_data(KEY_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
+  } else {
+    memset(entries, 0, sizeof(DayEntry) * HISTORY_DAYS);
+  }
+}
+
+static void load_prev_history_raw(DayEntry *entries) {
+  if (persist_exists(KEY_PREV_HISTORY)) {
+    persist_read_data(KEY_PREV_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
   } else {
     memset(entries, 0, sizeof(DayEntry) * HISTORY_DAYS);
   }
@@ -102,6 +112,9 @@ static void ensure_this_week(DayEntry *entries) {
   }
 
   if (!is_this_week) {
+    // Preserve per-day data for rolling-7-day view before archiving.
+    persist_write_data(KEY_PREV_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
+
     if (stored_week_start != 0) {
       archive_week(entries, stored_week_start);
     }
@@ -265,8 +278,9 @@ void storage_delete_all(void) {
   persist_delete(KEY_WEEK_HISTORY);
   persist_delete(KEY_HOUR_HISTOGRAM);
   persist_delete(KEY_ALLTIME_HOUR_HISTOGRAM);
-  // Intentionally keep KEY_STORAGE_VERSION and KEY_DAILY_GOAL — the user's
-  // goal setting should survive a data wipe.
+  persist_delete(KEY_PREV_HISTORY);
+  // Intentionally keep KEY_STORAGE_VERSION, KEY_DAILY_GOAL, and
+  // KEY_ROLLING_MODE — user settings should survive a data wipe.
 }
 
 // --- Hour histogram ----------------------------------------------------------
@@ -313,6 +327,49 @@ void storage_get_alltime_hour_histogram(uint16_t *out_24) {
 
 
 
+// --- Rolling-week mode -------------------------------------------------------
+
+void storage_set_rolling_mode(bool rolling) {
+  persist_write_int(KEY_ROLLING_MODE, rolling ? 1 : 0);
+}
+
+bool storage_get_rolling_mode(void) {
+  return persist_exists(KEY_ROLLING_MODE) && persist_read_int(KEY_ROLLING_MODE);
+}
+
+void storage_get_rolling_history(DayEntry *out7) {
+  DayEntry curr[HISTORY_DAYS], prev[HISTORY_DAYS];
+  load_history_raw(curr);
+  load_prev_history_raw(prev);
+
+  time_t now        = time(NULL);
+  time_t today_start = get_day_start(now);
+  time_t week_start  = get_week_start(now);
+  time_t prev_week_start = week_start - (time_t)(7 * 24 * 60 * 60);
+
+  for (int i = 0; i < 7; i++) {
+    // i=0 is 6 days ago, i=6 is today.
+    time_t day = today_start - (time_t)((6 - i) * 24 * 60 * 60);
+    time_t day_week = get_week_start(day);
+
+    DayEntry *src = NULL;
+    if (day_week == week_start) {
+      int slot = (int)((day - week_start) / (24 * 60 * 60));
+      if (slot >= 0 && slot < HISTORY_DAYS) src = &curr[slot];
+    } else if (day_week == prev_week_start) {
+      int slot = (int)((day - prev_week_start) / (24 * 60 * 60));
+      if (slot >= 0 && slot < HISTORY_DAYS) src = &prev[slot];
+    }
+
+    if (src && src->day_timestamp != 0) {
+      out7[i] = *src;
+    } else {
+      out7[i].day_timestamp = (int32_t)day;
+      out7[i].count = 0;
+    }
+  }
+}
+
 // --- Daily goal --------------------------------------------------------------
 
 void storage_set_goal(int goal) {
@@ -341,6 +398,20 @@ void storage_seed_debug_data(void) {
     entries[i].count = (i <= today_slot) ? (int32_t)fake_counts[i] : 0;
   }
   persist_write_data(KEY_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
+
+  // Previous week's per-day data for rolling-7-day mode testing.
+  {
+    const int prev_counts[HISTORY_DAYS] = { 14, 13, 15, 14, 16, 11, 10 };
+    time_t prev_ws = week_start - (time_t)(7 * 24 * 60 * 60);
+    DayEntry prev_entries[HISTORY_DAYS];
+    for (int i = 0; i < HISTORY_DAYS; i++) {
+      prev_entries[i].day_timestamp =
+          (int32_t)(prev_ws + (time_t)(i * 24 * 60 * 60));
+      prev_entries[i].count = (int32_t)prev_counts[i];
+    }
+    persist_write_data(KEY_PREV_HISTORY, prev_entries,
+                       sizeof(DayEntry) * HISTORY_DAYS);
+  }
 
   // 7 prior weeks, Mon–Sun.  Weekdays 11–16, weekends 8–12.
   // Slight upward drift toward the present is intentional — makes the

@@ -33,7 +33,16 @@ static void stats_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
 
-  time_t week_start = storage_get_week_start();
+  bool rolling = storage_get_rolling_mode();
+  time_t week_start;
+  if (rolling) {
+    time_t now = time(NULL);
+    struct tm tmp = *localtime(&now);
+    tmp.tm_hour = 0; tmp.tm_min = 0; tmp.tm_sec = 0;
+    week_start = mktime(&tmp) - (time_t)(6 * 24 * 60 * 60);
+  } else {
+    week_start = storage_get_week_start();
+  }
   ui_format_week_range(s_title_buf, sizeof(s_title_buf), week_start);
 
   int title_h = bounds.size.h / 7;
@@ -61,7 +70,12 @@ static void stats_window_load(Window *window) {
 
   DayEntry entries[HISTORY_DAYS];
   int num_entries;
-  storage_get_history(entries, &num_entries);
+  if (rolling) {
+    storage_get_rolling_history(entries);
+    num_entries = HISTORY_DAYS;
+  } else {
+    storage_get_history(entries, &num_entries);
+  }
   graph_layer_set_data(s_graph_layer, entries, num_entries);
   graph_layer_set_daily_goal(s_graph_layer, storage_get_goal());
 

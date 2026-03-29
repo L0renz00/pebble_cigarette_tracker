@@ -37,6 +37,15 @@ void storage_get_hour_histogram(uint8_t *out_24);
 // All-time hour-of-day histogram — 24 × uint16_t, never reset by rollover.
 void storage_get_alltime_hour_histogram(uint16_t *out_24);
 
+// Rolling-week mode: show last 7 days instead of Mon–Sun.
+void storage_set_rolling_mode(bool rolling);
+bool storage_get_rolling_mode(void);
+
+// Returns exactly 7 DayEntry slots covering today-6..today, merging previous
+// and current week data.  Every slot has a valid day_timestamp; count is 0
+// when no data exists for that day.
+void storage_get_rolling_history(DayEntry *out7);
+
 // Retroactive logging — insert a cigarette at an arbitrary past timestamp.
 // Returns flags so the caller can update its cached in-memory state.
 typedef struct {

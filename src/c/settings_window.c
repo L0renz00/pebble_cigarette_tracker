@@ -5,7 +5,7 @@
 #include "goal_window.h"
 #include "main.h"
 
-#define SETTINGS_NUM_ROWS    4
+#define SETTINGS_NUM_ROWS    5
 #define SETTINGS_CELL_HEIGHT 44
 
 static Window    *s_settings_window;
@@ -54,7 +54,14 @@ static void draw_row_callback(GContext *ctx, const Layer *cell_layer,
       menu_cell_basic_draw(ctx, cell_layer, "Daily Goal", goal_sub, NULL);
       break;
     }
-    case 3:
+    case 3: {
+      static char mode_sub[16];
+      bool rolling = storage_get_rolling_mode();
+      snprintf(mode_sub, sizeof(mode_sub), rolling ? "Rolling 7 days" : "Mon - Sun");
+      menu_cell_basic_draw(ctx, cell_layer, "Week Mode", mode_sub, NULL);
+      break;
+    }
+    case 4:
       menu_cell_basic_draw(ctx, cell_layer, "Load Debug Data", NULL, NULL);
       break;
     default:
@@ -89,7 +96,13 @@ static void select_callback(struct MenuLayer *menu_layer,
     case 2:
       goal_window_push((int)storage_get_goal());
       break;
-    case 3:
+    case 3: {
+      bool current = storage_get_rolling_mode();
+      storage_set_rolling_mode(!current);
+      menu_layer_reload_data(s_menu_layer);
+      break;
+    }
+    case 4:
       storage_seed_debug_data();
       main_window_refresh();
       window_stack_pop(true);
