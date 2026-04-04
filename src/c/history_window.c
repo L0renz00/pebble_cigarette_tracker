@@ -47,8 +47,8 @@ static void build_history_chart_data(AreaChartData *cd,
 
     // Bottom label: Monday date of that week, day-of-month only, e.g. "10".
     time_t ws = (time_t)entries[i].week_timestamp;
-    strftime(cd->bottom_labels[i], AREA_CHART_LABEL_LEN, "%d",
-             localtime(&ws));
+    struct tm ws_tm = *localtime(&ws);
+    strftime(cd->bottom_labels[i], AREA_CHART_LABEL_LEN, "%d", &ws_tm);
   }
 
   // Trend delta: newest avg minus oldest avg, shown as "▲ +1.2/d" / "▼ -0.8/d".

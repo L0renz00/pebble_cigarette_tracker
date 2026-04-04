@@ -504,6 +504,10 @@ RetroResult storage_log_at(time_t retro_ts) {
   if (is_this_week) {
     DayEntry entries[HISTORY_DAYS];
     load_history_raw(entries);
+    // Guard against stale data if the app survived across a week boundary.
+    // ensure_this_week() is idempotent — no-op when data is already current.
+    ensure_this_week(entries);
+    persist_write_data(KEY_HISTORY, entries, sizeof(DayEntry) * HISTORY_DAYS);
 
     int day_index = (int)((retro_day_start - week_start) / 86400);
     if (day_index < 0 || day_index >= HISTORY_DAYS) day_index = 0;

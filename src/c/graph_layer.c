@@ -61,7 +61,8 @@ static void graph_layer_update_proc(Layer *layer, GContext *ctx) {
 
     char date_str[4];
     time_t t = (time_t)data->entries[i].day_timestamp;
-    strftime(date_str, sizeof(date_str), "%a", localtime(&t));
+    struct tm t_tm = *localtime(&t);
+    strftime(date_str, sizeof(date_str), "%a", &t_tm);
 
     graphics_context_set_text_color(ctx,
         PBL_IF_COLOR_ELSE(is_today ? GColorBlueMoon : GColorBlack,

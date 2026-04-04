@@ -138,7 +138,7 @@ static void area_chart_update_proc(Layer *layer, GContext *ctx) {
     graphics_context_set_stroke_color(ctx, GColorBlack);
     graphics_context_set_stroke_width(ctx, 2);
     for (int i = 0; i < ts; i++) {
-      if (!d->chart.populated[i]) { prev_x = -1; prev_y = -1; continue; }
+      if (!d->chart.populated[i]) continue;
       int cx = SLOT_CX(i), y = Y_ANIM(d->chart.y[i]);
       if (prev_x >= 0)
         graphics_draw_line(ctx, GPoint(prev_x, prev_y), GPoint(cx, y));
